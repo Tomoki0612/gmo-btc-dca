@@ -56,9 +56,14 @@ def place_market_order(amount):
 def get_btc_price():
     logging.info("ビットコイン価格を取得します")
     response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC_JPY')
-    price = float(response.json()['data'][0]['last'])
-    logging.info(f"現在のビットコイン価格: {price} JPY")
-    return price
+    data = response.json()
+    if 'data' in data and len(data['data']) > 0:
+        price = float(data['data'][0]['last'])
+        logging.info(f"現在のビットコイン価格: {price} JPY")
+        return price
+    else:
+        logging.error("ビットコイン価格の取得に失敗しました")
+        raise ValueError("ビットコイン価格の取得に失敗しました")
 
 def main():
     logging.info("main関数が開始されました")
