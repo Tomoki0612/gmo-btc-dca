@@ -58,7 +58,7 @@ def get_btc_price():
     response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC_JPY')
     data = response.json()
     if 'data' in data and len(data['data']) > 0:
-        price = float(data['data'][0]['ltp'])
+        price = float(data['data'][0]['last'])
         logging.info(f"現在のビットコイン価格: {price} JPY")
         return price
     else:
