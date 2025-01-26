@@ -36,7 +36,7 @@ def get_signature(method, endpoint, body):
 
 def place_market_order(amount):
     method = 'POST'
-    endpoint = '/v1/account/orders'
+    endpoint = '/private/v1/account/orders'
     body = json.dumps({
         "symbol": "BTC_JPY",
         "side": "BUY",
@@ -55,8 +55,8 @@ def place_market_order(amount):
 
 def get_btc_price():
     logging.info("ビットコイン価格を取得します")
-    response = requests.get(API_ENDPOINT + '/v1/ticker?product_code=BTC_JPY')
-    price = float(response.json()['ltp'])
+    response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC_JPY')
+    price = float(response.json()['data'][0]['last'])
     logging.info(f"現在のビットコイン価格: {price} JPY")
     return price
 
@@ -66,7 +66,7 @@ def main():
         btc_price = get_btc_price()
         amount = TRADE_AMOUNT / btc_price
         # 0.00000001 BTC単位に丸める
-        amount = math.floor(amount * 100000000) / 100000000
+        amount = round(amount, 8)
         logging.info(f"購入予定量: {amount} BTC")
         result = place_market_order(amount)
         logging.info(f"注文結果: {result}")
