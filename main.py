@@ -25,7 +25,7 @@ logging.info(f"API_KEY: {API_KEY[:5]}...")  # セキュリティのため、最�
 
 # 設定
 TEST_MODE = False  # 実際の取引を行うためFalseに設定
-TRADE_AMOUNT = 60000  # 60,000円の取引に設定
+TRADE_AMOUNT = 30000  # 30,000円の取引に設定
 API_ENDPOINT = 'https://api.bitflyer.com'
 
 def get_signature(method, endpoint, body):
