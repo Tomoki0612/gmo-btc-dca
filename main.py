@@ -41,7 +41,7 @@ def place_market_order(amount):
         "symbol": "BTC_JPY",
         "side": "BUY",
         "executionType": "MARKET",
-        "size": str(amount / 1000000)  # 取引金額をBTCに変換
+        "size": str(round(amount, 8))  # 取引金額をBTCに変換
     })
     signature, timestamp = get_signature(method, endpoint, body)
     headers = {
@@ -58,7 +58,7 @@ def get_btc_price():
     response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC_JPY')
     data = response.json()
     if 'data' in data and len(data['data']) > 0:
-        price = float(data['data'][0]['last'])
+        price = float(data['data'][0]['ltp'])
         logging.info(f"現在のビットコイン価格: {price} JPY")
         return price
     else:
