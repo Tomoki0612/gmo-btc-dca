@@ -38,7 +38,7 @@ def place_market_order(amount):
     method = 'POST'
     endpoint = '/private/v1/account/orders'
     body = json.dumps({
-        "symbol": "BTC_JPY",
+        "symbol": "BTC",
         "side": "BUY",
         "executionType": "MARKET",
         "size": str(round(amount, 8))  # 取引金額をBTCに変換
@@ -56,40 +56,31 @@ def place_market_order(amount):
 def get_btc_price():
     logging.info("ビットコイン価格を取得します")
     try:
+        # シンボルを現物取引の正規表記に統一
         response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC')
         response.raise_for_status()
         
         data = response.json()
-        logging.info(f"完全なAPIレスポンス: {json.dumps(data, indent=2)}")  # レスポンス全体をログ出力
-        
-        # 公式ドキュメントに基づく構造解析
+        logging.debug(f"APIレスポンス: {json.dumps(data, indent=2)}")
+
         if data.get('status') != 0:
             raise ValueError(f"APIエラー status: {data.get('status')}")
             
-        ticker_list = data.get('data', [])
-        if not ticker_list:
-            raise ValueError("ティッカーデータが存在しません")
-            
-        ticker = ticker_list[0]
-        if 'ltp' not in ticker:  # 公式ドキュメント確認の結果、'ltp'が正しい場合
-            raise ValueError("ltpフィールドが存在しません")
-            
-        return float(ticker['ltp'])  # 最終取引価格
-        
+        ticker = data['data'][0]
+        return float(ticker['last'])  # 公式ドキュメントに基づきlastを使用:cite[2]:cite[10]
+
     except requests.exceptions.RequestException as e:
         logging.error(f"API接続エラー: {str(e)}")
-        raise
-    except (KeyError, IndexError, TypeError) as e:
-        logging.error(f"データ解析エラー: {str(e)}")
         raise
 
 def main():
     logging.info("main関数が開始されました")
     try:
         btc_price = get_btc_price()
-        amount = TRADE_AMOUNT / btc_price
-        # 0.00000001 BTC単位に丸める
-        amount = round(amount, 8)
+        # 最小注文単位0.0001 BTCに対応
+        MIN_ORDER_SIZE = 0.0001
+        amount = max(TRADE_AMOUNT / btc_price, MIN_ORDER_SIZE)
+        amount = math.floor(amount * 10000) / 10000  # 0.0001単位に切り捨て
         logging.info(f"購入予定量: {amount} BTC")
         result = place_market_order(amount)
         logging.info(f"注文結果: {result}")
