@@ -56,24 +56,31 @@ def place_market_order(amount):
 def get_btc_price():
     logging.info("ビットコイン価格を取得します")
     try:
-        response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC_JPY')
-        response.raise_for_status()  # HTTPエラーチェック
+        response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC')
+        response.raise_for_status()
         
         data = response.json()
-        logging.debug(f"APIレスポンス: {json.dumps(data, indent=2)}")
+        logging.info(f"完全なAPIレスポンス: {json.dumps(data, indent=2)}")  # レスポンス全体をログ出力
         
-        # 実際のAPIレスポンス構造に基づく修正
-        if 'data' not in data or not data['data']:
-            raise ValueError("データが存在しません")
+        # 公式ドキュメントに基づく構造解析
+        if data.get('status') != 0:
+            raise ValueError(f"APIエラー status: {data.get('status')}")
             
-        ticker = data['data'][0]
-        if 'ask' not in ticker:  # 最新価格は'ask'または'last'で取得
-            raise ValueError("価格情報が不正です")
+        ticker_list = data.get('data', [])
+        if not ticker_list:
+            raise ValueError("ティッカーデータが存在しません")
             
-        return float(ticker['ask'])  # 実際のAPI仕様に合わせてキーを変更
+        ticker = ticker_list[0]
+        if 'ltp' not in ticker:  # 公式ドキュメント確認の結果、'ltp'が正しい場合
+            raise ValueError("ltpフィールドが存在しません")
+            
+        return float(ticker['ltp'])  # 最終取引価格
         
-    except Exception as e:
-        logging.error(f"価格取得エラー: {str(e)}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"API接続エラー: {str(e)}")
+        raise
+    except (KeyError, IndexError, TypeError) as e:
+        logging.error(f"データ解析エラー: {str(e)}")
         raise
 
 def main():
