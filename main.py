@@ -1,24 +1,24 @@
-import requests
-import json
-from datetime import datetime
+import os
+import sys
 import time
 import hmac
 import hashlib
-import os
+import json
 import logging
+import requests
+from datetime import datetime
 import math
-import sys
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 logging.info("プログラムが開始されました")
 
 # 環境変数から認証情報を取得
-API_KEY = os.environ.get('API_KEY')
-API_SECRET = os.environ.get('API_SECRET')
+API_KEY = os.environ.get('GMO_API_KEY')
+API_SECRET = os.environ.get('GMO_API_SECRET')
 
 if not API_KEY or not API_SECRET:
-    logging.error("API_KEY or API_SECRET is not set in the environment variables.")
+    logging.error("GMO_API_KEY or GMO_API_SECRET is not set in the environment variables.")
     sys.exit(1)
 
 logging.info(f"API_KEY: {API_KEY[:5]}...")  # セキュリティのため、最初の5文字のみ表示
@@ -26,7 +26,7 @@ logging.info(f"API_KEY: {API_KEY[:5]}...")  # セキュリティのため、最�
 # 設定
 TEST_MODE = False  # 実際の取引を行うためFalseに設定
 TRADE_AMOUNT = 30000  # 30,000円の取引に設定
-API_ENDPOINT = 'https://api.bitflyer.com'
+API_ENDPOINT = 'https://api.coin.z.com'
 
 def get_signature(method, endpoint, body):
     timestamp = str(time.time())
@@ -36,27 +36,20 @@ def get_signature(method, endpoint, body):
 
 def place_market_order(amount):
     method = 'POST'
-    endpoint = '/v1/me/sendchildorder'
+    endpoint = '/v1/account/orders'
     body = json.dumps({
-        "product_code": "BTC_JPY",
-        "child_order_type": "MARKET",
+        "symbol": "BTC_JPY",
         "side": "BUY",
-        "size": amount,
+        "executionType": "MARKET",
+        "size": str(amount / 1000000)  # 取引金額をBTCに変換
     })
-
     signature, timestamp = get_signature(method, endpoint, body)
-
     headers = {
-        'ACCESS-KEY': API_KEY,
-        'ACCESS-TIMESTAMP': timestamp,
-        'ACCESS-SIGN': signature,
+        'API-KEY': API_KEY,
+        'API-TIMESTAMP': timestamp,
+        'API-SIGN': signature,
         'Content-Type': 'application/json'
     }
-
-    if TEST_MODE:
-        logging.info(f"テストモード: 注文をシミュレート - {amount} BTC")
-        return {"status": "TEST_SUCCESS"}
-
     response = requests.post(API_ENDPOINT + endpoint, headers=headers, data=body)
     return response.json()
 
