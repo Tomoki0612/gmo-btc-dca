@@ -55,32 +55,25 @@ def place_market_order(amount):
 
 def get_btc_price():
     logging.info("ビットコイン価格を取得します")
-    response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC_JPY')
-    
-    # ステータスコードチェックを追加
-    if response.status_code != 200:
-        logging.error(f"APIリクエスト失敗 ステータスコード: {response.status_code}")
-        raise ValueError("価格取得に失敗しました")
-    
-    data = response.json()
-    logging.debug(f"APIレスポンス: {json.dumps(data, indent=2)}")  # レスポンス構造確認用
-    
-    # レスポンス構造の厳密なチェック
-    if 'data' not in data or not isinstance(data['data'], list) or len(data['data']) == 0:
-        logging.error("不正なAPIレスポンス構造")
-        raise ValueError("価格データが不正です")
-    
-    ticker = data['data'][0]
-    if 'last' not in ticker:
-        logging.error("レスポンスにlastキーが存在しません")
-        raise ValueError("価格情報が不正です")
-    
     try:
-        price = float(ticker['last'])
-        logging.info(f"現在のビットコイン価格: {price} JPY")
-        return price
-    except ValueError:
-        logging.error("価格の数値変換に失敗しました")
+        response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC_JPY')
+        response.raise_for_status()  # HTTPエラーチェック
+        
+        data = response.json()
+        logging.debug(f"APIレスポンス: {json.dumps(data, indent=2)}")
+        
+        # 実際のAPIレスポンス構造に基づく修正
+        if 'data' not in data or not data['data']:
+            raise ValueError("データが存在しません")
+            
+        ticker = data['data'][0]
+        if 'ask' not in ticker:  # 最新価格は'ask'または'last'で取得
+            raise ValueError("価格情報が不正です")
+            
+        return float(ticker['ask'])  # 実際のAPI仕様に合わせてキーを変更
+        
+    except Exception as e:
+        logging.error(f"価格取得エラー: {str(e)}")
         raise
 
 def main():
