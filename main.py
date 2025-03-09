@@ -8,7 +8,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # .envファイルを読み込む
-load_dotenv()
+#load_dotenv()
 
 # 環境変数からAPIキーとシークレットキーを取得
 API_KEY = os.environ.get('GMO_API_KEY')
