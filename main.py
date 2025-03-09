@@ -5,7 +5,6 @@ import hashlib
 import time
 import os
 from datetime import datetime
-from dotenv import load_dotenv
 
 # .envファイルを読み込む
 #load_dotenv()
