@@ -1,92 +1,53 @@
-import os
-import sys
-import time
+import requests
+import json
 import hmac
 import hashlib
-import json
-import logging
-import requests
+import time
+import os
 from datetime import datetime
-import math
+from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# .envファイルを読み込む
+load_dotenv()
 
-logging.info("プログラムが開始されました")
-
-# 環境変数から認証情報を取得
+# 環境変数からAPIキーとシークレットキーを取得
 API_KEY = os.environ.get('GMO_API_KEY')
 API_SECRET = os.environ.get('GMO_API_SECRET')
 
-if not API_KEY or not API_SECRET:
-    logging.error("GMO_API_KEY or GMO_API_SECRET is not set in the environment variables.")
-    sys.exit(1)
+# APIキーとシークレットキーを出力（セキュリティ上の理由から一部のみ表示）
+print(f"APIキー: {API_KEY[:5]}...{API_KEY[-5:]}")
+print(f"シークレットキー: {API_SECRET[:5]}...{API_SECRET[-5:]}")
 
-logging.info(f"API_KEY: {API_KEY[:5]}...")  # セキュリティのため、最初の5文字のみ表示
-
-# 設定
-TEST_MODE = False  # 実際の取引を行うためFalseに設定
-TRADE_AMOUNT = 30000  # 30,000円の取引に設定
-API_ENDPOINT = 'https://api.coin.z.com'
-
-def get_signature(method, endpoint, body):
-    timestamp = str(time.time())
-    message = timestamp + method + endpoint + body
-    signature = hmac.new(API_SECRET.encode('utf-8'), message.encode('utf-8'), hashlib.sha256).hexdigest()
-    return signature, timestamp
-
-def place_market_order(amount):
-    method = 'POST'
-    endpoint = '/private/v1/account/orders'
-    body = json.dumps({
-        "symbol": "BTC",
-        "side": "BUY",
-        "executionType": "MARKET",
-        "size": str(round(amount, 8))  # 取引金額をBTCに変換
-    })
-    signature, timestamp = get_signature(method, endpoint, body)
-    headers = {
-        'API-KEY': API_KEY,
-        'API-TIMESTAMP': timestamp,
-        'API-SIGN': signature,
-        'Content-Type': 'application/json'
-    }
-    response = requests.post(API_ENDPOINT + endpoint, headers=headers, data=body)
-    return response.json()
-
+# BTCの現在価格を取得する関数
 def get_btc_price():
-    logging.info("ビットコイン価格を取得します")
-    try:
-        # シンボルを現物取引の正規表記に統一
-        response = requests.get(API_ENDPOINT + '/public/v1/ticker?symbol=BTC')
-        response.raise_for_status()
-        
-        data = response.json()
-        logging.debug(f"APIレスポンス: {json.dumps(data, indent=2)}")
+    response = requests.get('https://api.coin.z.com/public/v1/ticker?symbol=BTC')
+    data = response.json()
+    return float(data['data'][0]['last'])
 
-        if data.get('status') != 0:
-            raise ValueError(f"APIエラー status: {data.get('status')}")
-            
-        ticker = data['data'][0]
-        return float(ticker['last'])  # 公式ドキュメントに基づきlastを使用:cite[2]:cite[10]
+# 30000円分のBTCを計算
+btc_price = get_btc_price()
+amount_jpy = 30000
+size = round(amount_jpy / btc_price, 5)  # 小数点以下5桁に丸める
 
-    except requests.exceptions.RequestException as e:
-        logging.error(f"API接続エラー: {str(e)}")
-        raise
+timestamp = '{0}000'.format(int(time.mktime(datetime.now().timetuple())))
+method    = 'POST'
+endPoint  = 'https://api.coin.z.com/private'
+path      = '/v1/order'
+reqBody = {
+    "symbol": "BTC",
+    "side": "BUY",
+    "executionType": "MARKET",
+    "size": str(size)
+}
 
-def main():
-    logging.info("main関数が開始されました")
-    try:
-        btc_price = get_btc_price()
-        # 最小注文単位0.0001 BTCに対応
-        MIN_ORDER_SIZE = 0.0001
-        amount = max(TRADE_AMOUNT / btc_price, MIN_ORDER_SIZE)
-        amount = math.floor(amount * 10000) / 10000  # 0.0001単位に切り捨て
-        logging.info(f"購入予定量: {amount} BTC")
-        result = place_market_order(amount)
-        logging.info(f"注文結果: {result}")
-    except Exception as e:
-        logging.error(f"エラーが発生しました: {str(e)}", exc_info=True)
-    logging.info("プログラムが終了しました")
+text = timestamp + method + path + json.dumps(reqBody)
+sign = hmac.new(bytes(API_SECRET.encode('ascii')), bytes(text.encode('ascii')), hashlib.sha256).hexdigest()
 
-if __name__ == "__main__":
-    main()
+headers = {
+    "API-KEY": API_KEY,
+    "API-TIMESTAMP": timestamp,
+    "API-SIGN": sign
+}
+
+res = requests.post(endPoint + path, headers=headers, data=json.dumps(reqBody))
+print (json.dumps(res.json(), indent=2))
