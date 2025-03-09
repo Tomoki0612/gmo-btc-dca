@@ -1,11 +1,9 @@
 name: Monthly Crypto Order
 
 on:
-  # 毎月28日の0:00 UTC (日本時間9:00)に実行
   schedule:
-    - cron: '0 0 28 * *'
-  # 手動実行も可能にする場合
-  workflow_dispatch:
+    - cron: '0 0 28 * *'  # 毎月28日の0:00 UTC (日本時間9:00)に実行
+  workflow_dispatch:  # 手動実行用
 
 jobs:
   run-script:
