@@ -24,6 +24,6 @@ jobs:
 
       - name: Run the script
         env:
-          API_KEY: ${{ secrets.API_KEY }}
-          API_SECRET: ${{ secrets.API_SECRET }}
+          API_KEY: ${{ secrets.GMO_API_KEY }}
+          API_SECRET: ${{ secrets.GMO_API_SECRET }}
         run: python main.py
