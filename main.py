@@ -13,6 +13,10 @@ from datetime import datetime
 API_KEY = os.environ.get('GMO_API_KEY')
 API_SECRET = os.environ.get('GMO_API_SECRET')
 
+# APIキーとシークレットキーが設定されているか確認
+if not API_KEY or not API_SECRET:
+    raise ValueError("GMO_API_KEY または GMO_API_SECRET が環境変数に設定されていません。")
+
 # APIキーとシークレットキーを出力（セキュリティ上の理由から一部のみ表示）
 print(f"APIキー: {API_KEY[:5]}...{API_KEY[-5:]}")
 print(f"シークレットキー: {API_SECRET[:5]}...{API_SECRET[-5:]}")
