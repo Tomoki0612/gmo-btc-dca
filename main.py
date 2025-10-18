@@ -5,6 +5,7 @@ import hashlib
 import time
 import os
 from datetime import datetime
+import sys
 
 # .envファイルを読み込む
 #load_dotenv()
@@ -23,13 +24,22 @@ print(f"シークレットキー: {API_SECRET[:5]}...{API_SECRET[-5:]}")
 
 # BTCの現在価格を取得する関数
 def get_btc_price():
-    response = requests.get('https://api.coin.z.com/public/v1/ticker?symbol=BTC')
-    data = response.json()
-    return float(data['data'][0]['last'])
+    try:
+        response = requests.get('https://api.coin.z.com/public/v1/ticker?symbol=BTC', timeout=30)
+        response.raise_for_status()  # ステータスコードが200以外の場合は例外を発生
+        data = response.json()
+        return float(data['data'][0]['last'])
+    except requests.exceptions.RequestException as e:
+        print(f"価格取得エラー: {str(e)}")
+        raise
 
 # 10000円分のBTCを計算
 btc_price = get_btc_price()
+
+# 10000円分のBTCを計算
 amount_jpy = 10000
+
+# 10000円分のBTCを計算
 size = round(amount_jpy / btc_price, 5)  # 小数点以下5桁に丸める
 
 timestamp = '{0}000'.format(int(time.mktime(datetime.now().timetuple())))
@@ -52,5 +62,33 @@ headers = {
     "API-SIGN": sign
 }
 
-res = requests.post(endPoint + path, headers=headers, data=json.dumps(reqBody))
-print (json.dumps(res.json(), indent=2))
+try:
+    res = requests.post(
+        endPoint + path,
+        headers=headers,
+        data=json.dumps(reqBody),
+        timeout=30  # タイムアウトを30秒に設定
+    )
+    res.raise_for_status()  # HTTPエラーがある場合は例外を発生
+    
+    response_data = res.json()
+    # GMO APIの応答ステータスを確認
+    if response_data.get('status') != 0:
+        print(f"取引エラー: {response_data.get('messages', '不明なエラー')}")
+        sys.exit(1)  # エラー時は非ゼロで終了（GitHub Actions が失敗と判定）
+    else:
+        print("取引が正常に完了しました")
+        print(json.dumps(response_data, indent=2, ensure_ascii=False))
+
+except requests.exceptions.Timeout:
+    print("APIリクエストがタイムアウトしました")
+    sys.exit(1)
+except requests.exceptions.RequestException as e:
+    print(f"API通信エラー: {str(e)}")
+    sys.exit(1)
+except json.JSONDecodeError:
+    print("JSONデコードエラー: APIレスポンスの解析に失敗しました")
+    sys.exit(1)
+except Exception as e:
+    print(f"予期せぬエラーが発生しました: {str(e)}")
+    sys.exit(1)
