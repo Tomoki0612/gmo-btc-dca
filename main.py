@@ -27,9 +27,9 @@ def get_btc_price():
     data = response.json()
     return float(data['data'][0]['last'])
 
-# 30000円分のBTCを計算
+# 10000円分のBTCを計算
 btc_price = get_btc_price()
-amount_jpy = 30000
+amount_jpy = 10000
 size = round(amount_jpy / btc_price, 5)  # 小数点以下5桁に丸める
 
 timestamp = '{0}000'.format(int(time.mktime(datetime.now().timetuple())))
