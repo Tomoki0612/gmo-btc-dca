@@ -5,6 +5,7 @@ import hashlib
 import time
 import os
 from datetime import datetime
+import sys
 
 # .envファイルを読み込む
 #load_dotenv()
@@ -35,19 +36,7 @@ def get_btc_price():
 # 10000円分のBTCを計算
 btc_price = get_btc_price()
 
-# BTCの現在価格を取得する関数
-def get_btc_price():
-    try:
-        response = requests.get('https://api.coin.z.com/public/v1/ticker?symbol=BTC', timeout=30)
-        response.raise_for_status()  # ステータスコードが200以外の場合は例外を発生
-        data = response.json()
-        return float(data['data'][0]['last'])
-    except requests.exceptions.RequestException as e:
-        print(f"価格取得エラー: {str(e)}")
-        raise
-
 # 10000円分のBTCを計算
-btc_price = get_btc_price()
 amount_jpy = 10000
 
 # 10000円分のBTCを計算
@@ -86,15 +75,20 @@ try:
     # GMO APIの応答ステータスを確認
     if response_data.get('status') != 0:
         print(f"取引エラー: {response_data.get('messages', '不明なエラー')}")
+        sys.exit(1)  # エラー時は非ゼロで終了（GitHub Actions が失敗と判定）
     else:
         print("取引が正常に完了しました")
         print(json.dumps(response_data, indent=2, ensure_ascii=False))
 
 except requests.exceptions.Timeout:
     print("APIリクエストがタイムアウトしました")
+    sys.exit(1)
 except requests.exceptions.RequestException as e:
     print(f"API通信エラー: {str(e)}")
+    sys.exit(1)
 except json.JSONDecodeError:
     print("JSONデコードエラー: APIレスポンスの解析に失敗しました")
+    sys.exit(1)
 except Exception as e:
     print(f"予期せぬエラーが発生しました: {str(e)}")
+    sys.exit(1)
