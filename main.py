@@ -48,6 +48,7 @@ def get_btc_price():
 
 # 10000円分のBTCを計算
 btc_price = get_btc_price()
+amount_jpy = 10000
 
 # 10000円分のBTCを計算
 size = round(amount_jpy / btc_price, 5)  # 小数点以下5桁に丸める
