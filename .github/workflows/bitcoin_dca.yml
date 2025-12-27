@@ -1,4 +1,4 @@
-name: Monthly Crypto Order
+name: Monthly BTC Purchase
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:  # 手動実行用
 
 jobs:
-  run-script:
+  buy-btc:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,14 +16,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          pip install requests
+          pip install -r github-actions/requirements.txt
 
       - name: Run the script
         env:
           GMO_API_KEY: ${{ secrets.GMO_API_KEY }}
           GMO_API_SECRET: ${{ secrets.GMO_API_SECRET }}
-        run: python main.py
+        run: python github-actions/btc_purchase.py
