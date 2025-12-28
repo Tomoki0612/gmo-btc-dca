@@ -39,6 +39,45 @@ def send_notification(subject, message):
     except Exception as e:
         print(f"通知送信エラー: {str(e)}")
 
+def get_account_balance():
+    """口座残高（買付余力）を取得する関数"""
+    timestamp = '{0}000'.format(int(time.mktime(datetime.now().timetuple())))
+    method = 'GET'
+    endPoint = 'https://api.coin.z.com/private'
+    path = '/v1/account/margin'
+    
+    text = timestamp + method + path
+    sign = hmac.new(bytes(API_SECRET.encode('ascii')), bytes(text.encode('ascii')), hashlib.sha256).hexdigest()
+    
+    headers = {
+        "API-KEY": API_KEY,
+        "API-TIMESTAMP": timestamp,
+        "API-SIGN": sign
+    }
+    
+    try:
+        res = requests.get(
+            endPoint + path,
+            headers=headers,
+            timeout=30
+        )
+        res.raise_for_status()
+        
+        response_data = res.json()
+        
+        if response_data.get('status') != 0:
+            error_msg = f"残高取得エラー: {response_data.get('messages', '不明なエラー')}"
+            print(error_msg)
+            return None
+        
+        # 買付余力（availableAmount）を取得
+        available_amount = float(response_data['data'].get('availableAmount', 0))
+        return available_amount
+        
+    except Exception as e:
+        print(f"残高取得エラー: {str(e)}")
+        return None
+
 def get_btc_price():
     """BTCの現在価格を取得する関数"""
     try:
@@ -113,7 +152,7 @@ def lambda_handler(event, context):
     """Lambda関数のメインハンドラー"""
     
     try:
-        # 積立金額（円）
+        # 積立金額（円）(3000あれば変える)
         INVESTMENT_AMOUNT = 10000
         
         print(f"積立開始: {datetime.now().isoformat()}")
@@ -122,14 +161,20 @@ def lambda_handler(event, context):
         # 注文実行
         result, btc_price, btc_amount = place_order(INVESTMENT_AMOUNT)
         
+        # 購入後の買付余力を取得
+        time.sleep(2)  # API実行後、残高反映まで少し待つ
+        available_balance = get_account_balance()
+        
         # 成功メッセージ
+        balance_info = f"\n購入後の買付余力: ¥{available_balance:,.0f}" if available_balance is not None else "\n買付余力: 取得できませんでした"
+        
         message = f"""BTC積立が成功しました
 
 日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}
 積立金額: ¥{INVESTMENT_AMOUNT:,}
 BTC価格: ¥{btc_price:,.0f}
 購入数量: {btc_amount} BTC
-購入金額: ¥{btc_price * btc_amount:,.0f}
+購入金額: ¥{btc_price * btc_amount:,.0f}{balance_info}
 
 注文ID: {result.get('data', 'N/A')}
 """
