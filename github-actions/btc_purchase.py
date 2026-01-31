@@ -13,15 +13,22 @@ import sys
 # 環境変数からAPIキーとシークレットキーを取得
 API_KEY = os.environ.get('GMO_API_KEY')
 API_SECRET = os.environ.get('GMO_API_SECRET')
+INVESTMENT_AMOUNT = os.environ.get('INVESTMENT_AMOUNT')
 
 # APIキーとシークレットキーが設定されているか確認
 if not API_KEY or not API_SECRET:
     raise ValueError("GMO_API_KEY または GMO_API_SECRET が環境変数に設定されていません。")
 
+if not INVESTMENT_AMOUNT:
+    raise ValueError("金額が設定されていません")
+
+INVESTMENT_AMOUNT = int(INVESTMENT_AMOUNT)
+
 # APIキーとシークレットキーを出力（セキュリティ上の理由から一部のみ表示）
+'''
 print(f"APIキー: {API_KEY[:5]}...{API_KEY[-5:]}")
 print(f"シークレットキー: {API_SECRET[:5]}...{API_SECRET[-5:]}")
-
+'''
 # BTCの現在価格を取得する関数
 def get_btc_price():
     try:
@@ -33,13 +40,13 @@ def get_btc_price():
         print(f"価格取得エラー: {str(e)}")
         raise
 
-# 10000円分のBTCを計算
+# BTC価格を取得
 btc_price = get_btc_price()
 
-# 10000円分のBTCを計算
-amount_jpy = 10000
+# 積立金額を設定
+amount_jpy = INVESTMENT_AMOUNT
 
-# 10000円分のBTCを計算
+# 購入するBTC数量を計算
 size = round(amount_jpy / btc_price, 5)  # 小数点以下5桁に丸める
 
 timestamp = '{0}000'.format(int(time.mktime(datetime.now().timetuple())))

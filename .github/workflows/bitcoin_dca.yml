@@ -26,4 +26,5 @@ jobs:
         env:
           GMO_API_KEY: ${{ secrets.GMO_API_KEY }}
           GMO_API_SECRET: ${{ secrets.GMO_API_SECRET }}
+          INVESTMENT_AMOUNT: ${{ secrets.INVESTMENT_AMOUNT }}
         run: python github-actions/btc_purchase.py
