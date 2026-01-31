@@ -10,7 +10,8 @@ from datetime import datetime
 # 環境変数から取得
 API_KEY = os.environ.get('GMO_API_KEY')
 API_SECRET = os.environ.get('GMO_API_SECRET')
-SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')  # 追加
+SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN') 
+INVESTMENT_AMOUNT = os.environ.get('INVESTMENT_AMOUNT')# 積立金額（円）(3000あれば賈える)
 
 # SNSクライアントの初期化
 sns = boto3.client('sns', region_name='ap-northeast-1')  # 東京リージョン
@@ -19,9 +20,16 @@ sns = boto3.client('sns', region_name='ap-northeast-1')  # 東京リージョン
 if not API_KEY or not API_SECRET:
     raise ValueError("GMO_API_KEY または GMO_API_SECRET が環境変数に設定されていません。")
 
+if not INVESTMENT_AMOUNT:
+    raise ValueError("金額が設定されていません")
+
+INVESTMENT_AMOUNT = int(INVESTMENT_AMOUNT)
+
 # APIキーとシークレットキーを出力（セキュリティ上の理由から一部のみ表示）
+'''
 print(f"APIキー: {API_KEY[:5]}...{API_KEY[-5:]}")
 print(f"シークレットキー: {API_SECRET[:5]}...{API_SECRET[-5:]}")
+'''
 
 def send_notification(subject, message):
     """SNSでメール通知を送信"""
@@ -152,8 +160,7 @@ def lambda_handler(event, context):
     """Lambda関数のメインハンドラー"""
     
     try:
-        # 積立金額（円）(3000あれば変える)
-        INVESTMENT_AMOUNT = 10000
+        
         
         print(f"積立開始: {datetime.now().isoformat()}")
         print(f"積立金額: ¥{INVESTMENT_AMOUNT:,}")
