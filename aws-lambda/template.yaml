@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: BTC自動積立Lambda関数 - GMOコインAPIを使用した定期購入
+
+Parameters:
+  GmoApiKey:
+    Type: String
+    NoEcho: true
+    Description: GMOコインのAPIキー
+
+  GmoApiSecret:
+    Type: String
+    NoEcho: true
+    Description: GMOコインのAPIシークレット
+
+  InvestmentAmount:
+    Type: String
+    Default: "3000"
+    Description: 積立金額（円）
+
+  ScheduleExpression:
+    Type: String
+    Default: "cron(0 0 28 * ? *)"
+    Description: 実行スケジュール（デフォルト:毎月28日 UTC 0時 = JST 9時）
+
+  EnableSnsNotification:
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: SNS通知を有効にするか
+
+  NotificationEmail:
+    Type: String
+    Default: ""
+    Description: 通知先メールアドレス（空の場合はSNS通知なし）
+
+Conditions:
+  CreateSnsResources: !And
+    - !Equals [!Ref EnableSnsNotification, "true"]
+    - !Not [!Equals [!Ref NotificationEmail, ""]]
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.11
+
+Resources:
+  BtcAutoPurchaseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: btc-auto-purchase
+      CodeUri: .
+      Handler: btc_auto_purchase.lambda_handler
+      Description: GMOコインでBTCを自動購入するLambda関数
+      Environment:
+        Variables:
+          GMO_API_KEY: !Ref GmoApiKey
+          GMO_API_SECRET: !Ref GmoApiSecret
+          INVESTMENT_AMOUNT: !Ref InvestmentAmount
+          SNS_TOPIC_ARN: !If
+            - CreateSnsResources
+            - !Ref BtcPurchaseNotificationTopic
+            - ""
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !If
+                - CreateSnsResources
+                - !Ref BtcPurchaseNotificationTopic
+                - !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:*"
+      Events:
+        ScheduledPurchase:
+          Type: Schedule
+          Properties:
+            Name: btc-daily-purchase
+            Description: BTC定期購入スケジュール
+            Schedule: !Ref ScheduleExpression
+            Enabled: true
+
+  BtcPurchaseNotificationTopic:
+    Type: AWS::SNS::Topic
+    Condition: CreateSnsResources
+    Properties:
+      TopicName: btc-purchase-notifications
+      DisplayName: BTC購入通知
+
+  BtcPurchaseEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: CreateSnsResources
+    Properties:
+      TopicArn: !Ref BtcPurchaseNotificationTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+Outputs:
+  FunctionArn:
+    Description: Lambda関数のARN
+    Value: !GetAtt BtcAutoPurchaseFunction.Arn
+
+  FunctionName:
+    Description: Lambda関数名
+    Value: !Ref BtcAutoPurchaseFunction
+
+  SnsTopicArn:
+    Description: SNSトピックのARN
+    Condition: CreateSnsResources
+    Value: !Ref BtcPurchaseNotificationTopic

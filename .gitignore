@@ -8,11 +8,23 @@ instance/
 aws-lambda/package/
 aws-lambda/*.zip
 
+# AWS SAM
+.aws-sam/
+aws-lambda/.aws-sam/
+aws-lambda/env.json
+samconfig.toml
+
 # Logs
 *.log
 
 # OS
 .DS_Store
 
+# IDE
+.vscode/
+
 # Environment variables
 .env
+
+# Claude Code
+CLAUDE.md

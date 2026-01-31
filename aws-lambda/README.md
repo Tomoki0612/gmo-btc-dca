@@ -7,6 +7,66 @@
 
 ## デプロイ方法
 
+### 方法0: AWS SAM（推奨）
+
+AWS SAMを使うと、コマンド1つでLambda、EventBridge、SNSをまとめてデプロイできます。
+
+#### 前提条件
+```bash
+# AWS SAM CLIのインストール
+# macOS
+brew install aws-sam-cli
+
+# Windows
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html
+
+# 確認
+sam --version
+```
+
+#### 初回デプロイ
+```bash
+cd aws-lambda
+
+# 対話形式でデプロイ（パラメータを入力）
+make deploy-guided
+```
+
+以下のパラメータを聞かれます：
+- `GmoApiKey`: GMOコインAPIキー
+- `GmoApiSecret`: GMOコインAPIシークレット
+- `InvestmentAmount`: 積立金額（デフォルト: 3000）
+- `ScheduleExpression`: 実行スケジュール（デフォルト: 毎月28日 9時 JST）
+- `NotificationEmail`: 通知先メールアドレス（空欄でスキップ可）
+
+#### 2回目以降のデプロイ
+```bash
+# コード変更後
+make deploy
+```
+
+#### その他のコマンド
+```bash
+make help          # 使用可能なコマンド一覧
+make logs          # CloudWatch Logsをリアルタイム表示
+make invoke        # ローカルでテスト実行
+make validate      # テンプレートの構文チェック
+make delete        # スタック削除（全リソース削除）
+```
+
+#### ローカルテスト
+```bash
+# env.jsonを作成
+cp env.json.example env.json
+# env.jsonを編集してAPIキーを設定
+
+# ローカル実行
+make invoke
+```
+
+---
+
+
 ### 方法1: AWS コンソールから（初心者向け）
 
 #### 1. Lambda関数の作成
