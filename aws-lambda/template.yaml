@@ -15,7 +15,7 @@ Parameters:
 
   InvestmentAmount:
     Type: String
-    Default: "3000"
+    Default: "10000"
     Description: 積立金額（円）
 
   ScheduleExpression:
