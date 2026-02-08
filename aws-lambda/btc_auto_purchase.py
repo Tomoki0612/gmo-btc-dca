@@ -127,8 +127,9 @@ def place_order(amount_jpy):
     }
     
     try:
-        if DRY_RUN == True:
-            return
+        if DRY_RUN == "true":
+            response_data = {"data":"DRY_RUN"}
+            return response_data, btc_price, size
         else:
             res = requests.post(
                 endPoint + path,
