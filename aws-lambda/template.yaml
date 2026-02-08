@@ -36,6 +36,11 @@ Parameters:
     Default: ""
     Description: 通知先メールアドレス（空の場合はSNS通知なし）
 
+  DryRun:
+    Type: String
+    Default: "false"
+    Description: テスト実行フラグ
+
 Conditions:
   CreateSnsResources: !And
     - !Equals [!Ref EnableSnsNotification, "true"]
@@ -64,6 +69,7 @@ Resources:
             - CreateSnsResources
             - !Ref BtcPurchaseNotificationTopic
             - ""
+          DRY_RUN: !Ref DryRun
       Policies:
         - Version: '2012-10-17'
           Statement:
