@@ -12,6 +12,7 @@ API_KEY = os.environ.get('GMO_API_KEY')
 API_SECRET = os.environ.get('GMO_API_SECRET')
 SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN') 
 INVESTMENT_AMOUNT = os.environ.get('INVESTMENT_AMOUNT')# 積立金額（円）(3000あれば賈える)
+DRY_RUN = os.environ.get('DRY_RUN')
 
 # SNSクライアントの初期化
 sns = boto3.client('sns', region_name='ap-northeast-1')  # 東京リージョン
@@ -126,12 +127,15 @@ def place_order(amount_jpy):
     }
     
     try:
-        res = requests.post(
-            endPoint + path,
-            headers=headers,
-            data=json.dumps(reqBody),
-            timeout=30
-        )
+        if DRY_RUN == True:
+            return
+        else:
+            res = requests.post(
+                endPoint + path,
+                headers=headers,
+                data=json.dumps(reqBody),
+                timeout=30
+            )
         res.raise_for_status()
         
         response_data = res.json()
