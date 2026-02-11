@@ -15,7 +15,7 @@ function App() {
       return ;
     }
     if (schedule === '') {
-      setError("積み立て日が入力されていません")
+      setError("積立日が入力されていません")
       return ;
     }
     if (apiKey === '') {
@@ -38,36 +38,40 @@ function App() {
         <img src={logo} className="App-logo" alt="logo" />
         <div>
           <h1>{ title }</h1>
-          <label>積立金額（円）</label>
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <p>現在の設定：{amount}</p>
-          <label>積立日</label>
-          <input
-            type="text"
-            value={schedule}
-            onChange={(e) => setSchedule(e.target.value)}
-          />
-          <p>現在の設定：{schedule}</p>
-          <label>apiKey</label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-          />
-          <p>現在の設定：{apiKey}</p>
-          <label>apiSecret</label>
-          <input
-            type="password"
-            value={apiSecret}
-            onChange={(e) => setApiSecret(e.target.value)}
-          />
-          <p>現在の設定：{apiSecret}</p>
-          <button onClick={handleSave}>保存</button>
-          <p>{error}</p>
+          <div className='form-group'>
+            <label>積立金額（円）</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+          <div className='form-group'>
+            <label>積立日</label>
+            <input
+              type="text"
+              value={schedule}
+              onChange={(e) => setSchedule(e.target.value)}
+            />
+          </div>
+          <div className='form-group'>
+            <label>apiKey</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+          </div>
+          <div className='form-group'>
+            <label>apiSecret</label>
+            <input
+              type="password"
+              value={apiSecret}
+              onChange={(e) => setApiSecret(e.target.value)}
+            />
+          </div>
+          <button className = "save-button" onClick={handleSave}>保存</button>
+          <p className='error-message'>{error}</p>
         </div>
         <a
           className="App-link"
