@@ -36,3 +36,25 @@
     transform: rotate(360deg);
   }
 }
+
+.form-group {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.save-button {
+  padding: 10px 40px;
+  font-size: 16px;
+  background-color: #61dafb;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 15px;
+}
+
+.error-message {
+  color: #ff6b6b;
+}
