@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import './App.css';
-import logo from './logo.svg';
 
 function App() {
   const title = "tubitoko 設定画面"
@@ -9,24 +8,30 @@ function App() {
   const [apiSecret, setApiSecret] = useState("");
   const [schedule, setSchedule] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("")
   const handleSave = () => {
     if (amount === null || amount <= 0) {
+      setSuccess("")
       setError("金額が適切に入力されていません")
       return ;
     }
     if (schedule === '') {
+      setSuccess("")
       setError("積立日が入力されていません")
       return ;
     }
     if (apiKey === '') {
+      setSuccess("")
       setError("APIキーを入力してください")
       return ;
     } 
     if (apiSecret === '') {
+      setSuccess("")
       setError("APIシークレットを入力してください")
       return ;
     }
     setError("")
+    setSuccess("保存しました")
     console.log(amount,schedule, apiKey, apiSecret);
     };
 
@@ -35,7 +40,6 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
         <div>
           <h1>{ title }</h1>
           <div className='form-group'>
@@ -48,11 +52,12 @@ function App() {
           </div>
           <div className='form-group'>
             <label>積立日</label>
-            <input
-              type="text"
-              value={schedule}
-              onChange={(e) => setSchedule(e.target.value)}
-            />
+            <select value={schedule} onChange={(e) => setSchedule(e.target.value)}>
+              <option value="">選択してください</option>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                <option key = {day} value={day}>{day}日</option>
+              ))}
+            </select>
           </div>
           <div className='form-group'>
             <label>apiKey</label>
@@ -72,15 +77,8 @@ function App() {
           </div>
           <button className = "save-button" onClick={handleSave}>保存</button>
           <p className='error-message'>{error}</p>
+          <p className='success-message'>{success}</p>
         </div>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
       </header>
     </div>
   );
