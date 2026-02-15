@@ -49,6 +49,17 @@
   margin-top: 15px;
 }
 
+.signout-button {
+  padding: 8px 20px;
+  font-size: 14px;
+  background: none;
+  border: 1px solid #888;
+  border-radius: 5px;
+  color: #888;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
 .error-message {
   color: #ff6b6b;
 }
