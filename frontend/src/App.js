@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { withAuthenticator } from '@aws-amplify/ui-react';
+import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 
-function App() {
+function App({ signOut }) {
   const title = "tubitoko 設定画面"
   const [amount, setAmount] = useState(10000);
   const [apiKey, setApiKey] = useState("");
@@ -101,9 +103,10 @@ function App() {
           <p className='error-message'>{error}</p>
           <p className='success-message'>{success}</p>
         </div>
+        <button className="signout-button" onClick={signOut}>サインアウト</button>
       </header>
     </div>
   );
 }
 
-export default App;
+export default withAuthenticator(App);
