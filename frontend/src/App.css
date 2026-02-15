@@ -14,7 +14,22 @@
   color: white;
 }
 
+.card {
+  border: 1px solid #444;
+  border-radius: 10px;
+  padding: 40px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
 
+.form-group input,
+.form-group select {
+  padding: 8px 12px;
+  font-size: 16px;
+  border: 1px solid #555;
+  border-radius: 5px;
+  background-color: #1e2128;
+  color: white;
+}
 
 .form-group {
   display: grid;

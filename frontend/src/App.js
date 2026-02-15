@@ -62,7 +62,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <div>
+        <div className="card">
           <h1>{ title }</h1>
           <div className='form-group'>
             <label>積立金額（円）</label>
@@ -82,7 +82,7 @@ function App() {
             </select>
           </div>
           <div className='form-group'>
-            <label>apiKey</label>
+            <label>APIキー</label>
             <input
               type="password"
               value={apiKey}
@@ -90,7 +90,7 @@ function App() {
             />
           </div>
           <div className='form-group'>
-            <label>apiSecret</label>
+            <label>APIシークレット</label>
             <input
               type="password"
               value={apiSecret}
