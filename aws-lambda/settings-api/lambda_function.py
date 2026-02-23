@@ -36,7 +36,9 @@ def lambda_handler(event, context):
             Item={
                 "userId": "user1",
                 "amount": body["amount"],
-                "schedule": body["schedule"],
+                "frequency": body["frequency"],
+                "scheduleDay": body["scheduleDay"],
+                "scheduleTime": body["scheduleTime"],
                 "apiKey": body["apiKey"],
                 "apiSecret": body["apiSecret"],
             }
