@@ -32,17 +32,12 @@ def lambda_handler(event, context):
 
     if method == "POST":
         body = json.loads(event["body"])
-        table.put_item(
-            Item={
-                "userId": "user1",
-                "amount": body["amount"],
-                "frequency": body["frequency"],
-                "scheduleDay": body["scheduleDay"],
-                "scheduleTime": body["scheduleTime"],
-                "apiKey": body["apiKey"],
-                "apiSecret": body["apiSecret"],
-            }
-        )
+        item = {"userId": "user1"}
+        for key in ["amount", "frequency", "scheduleDay", "scheduleTime", "apiKey", "apiSecret"]:
+            val = body.get(key)
+            if val is not None and val != "":
+                item[key] = val
+        table.put_item(Item=item)
         return {
             "statusCode": 200,
             "headers": HEADERS,
