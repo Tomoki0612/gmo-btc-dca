@@ -24,7 +24,7 @@ deploy-with-params: build
 
 # ローカルでLambda関数を実行（env.jsonが必要）
 invoke:
-	sam local invoke BtcAutoPurchaseFunction --env-vars env.json
+	sam local invoke BtcAutoPurchaseFunction --env-vars auto-purchase/env.json
 
 # CloudWatch Logsをリアルタイム表示
 logs:

@@ -57,7 +57,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: btc-auto-purchase
-      CodeUri: .
+      CodeUri: auto-purchase/
       Handler: btc_auto_purchase.lambda_handler
       Description: GMOコインでBTCを自動購入するLambda関数
       Environment:
