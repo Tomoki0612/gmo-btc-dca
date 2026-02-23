@@ -1,10 +1,14 @@
+body {
+  margin: 0;
+  background-color: #0d1117;
+}
+
 .App {
   text-align: center;
 }
 
-
 .App-header {
-  background-color: #282c34;
+  background-color: #0d1117;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -15,19 +19,26 @@
 }
 
 .card {
-  border: 1px solid #444;
+  border: 1px solid #30363d;
   border-radius: 10px;
   padding: 40px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  background-color: #161b22;
+}
+
+.password-card {
+  margin-top: 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .form-group input,
 .form-group select {
   padding: 8px 12px;
   font-size: 16px;
-  border: 1px solid #555;
+  border: 1px solid #30363d;
   border-radius: 5px;
-  background-color: #1e2128;
+  background-color: #0d1117;
   color: white;
 }
 
@@ -39,23 +50,98 @@
   margin-bottom: 10px;
 }
 
+.page-header {
+  display: flex;
+  align-items: center;
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.page-header h1 {
+  flex: 1;
+  text-align: center;
+  margin: 0;
+}
+
+.back-button {
+  position: absolute;
+  left: 0;
+  padding: 6px 12px;
+  font-size: 14px;
+  background: none;
+  border: 1px solid #444;
+  border-radius: 5px;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.api-settings-button {
+  padding: 8px 20px;
+  font-size: 14px;
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  color: #aaa;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
+.api-settings-button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
 .save-button {
   padding: 10px 40px;
   font-size: 16px;
-  background-color: #61dafb;
+  background-color: #f97316;
+  color: white;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   margin-top: 15px;
 }
 
+.save-button:hover {
+  background-color: #ea6a0a;
+}
+
+.change-password-button {
+  padding: 8px 20px;
+  font-size: 14px;
+  background: none;
+  border: 1px solid #f97316;
+  border-radius: 5px;
+  color: #f97316;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
+.change-password-button:hover {
+  background-color: rgba(249, 115, 22, 0.1);
+}
+
+.cancel-button {
+  padding: 8px 20px;
+  font-size: 14px;
+  background: none;
+  border: 1px solid #555;
+  border-radius: 5px;
+  color: #888;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
 .signout-button {
   padding: 8px 20px;
   font-size: 14px;
   background: none;
-  border: 1px solid #888;
+  border: 1px solid #444;
   border-radius: 5px;
-  color: #888;
+  color: #666;
   cursor: pointer;
   margin-top: 20px;
 }
@@ -66,4 +152,105 @@
 
 .success-message {
   color: #4caf50;
+}
+
+.auth-header {
+  text-align: center;
+  padding: 24px 0 8px;
+}
+
+.auth-header h1 {
+  color: #f97316;
+  font-size: 28px;
+  margin: 0 0 4px;
+}
+
+.auth-header p {
+  color: #888;
+  font-size: 13px;
+  margin: 0;
+}
+
+/* Amplify Authenticator ダークテーマ上書き */
+[data-amplify-authenticator] {
+  --amplify-colors-background-primary: #0d1117;
+  --amplify-colors-background-secondary: #161b22;
+  --amplify-colors-font-primary: #ffffff;
+  --amplify-colors-font-secondary: #cccccc;
+  --amplify-colors-border-primary: #30363d;
+  --amplify-colors-border-secondary: #30363d;
+  background-color: #0d1117;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-amplify-router] {
+  background-color: #161b22 !important;
+  border: 1px solid #30363d !important;
+  border-radius: 10px !important;
+}
+
+.amplify-label {
+  color: #cccccc !important;
+}
+
+.amplify-input {
+  background-color: #0d1117 !important;
+  color: #ffffff !important;
+  border-color: #30363d !important;
+}
+
+.amplify-input:focus {
+  border-color: #f97316 !important;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2) !important;
+}
+
+.amplify-tabs-item {
+  color: #888 !important;
+  background-color: #161b22 !important;
+}
+
+.amplify-tabs-item[data-state="active"] {
+  color: #f97316 !important;
+  border-color: #f97316 !important;
+  background-color: #161b22 !important;
+}
+
+.amplify-heading {
+  color: #ffffff !important;
+}
+
+.amplify-text {
+  color: #cccccc !important;
+}
+
+.amplify-tabs {
+  background-color: #161b22 !important;
+  border-color: #30363d !important;
+}
+
+.amplify-button--link {
+  color: #f97316 !important;
+}
+
+.amplify-button--primary {
+  background-color: #f97316 !important;
+  border-color: #f97316 !important;
+}
+
+.amplify-button--primary:hover {
+  background-color: #ea6a0a !important;
+  border-color: #ea6a0a !important;
+}
+
+.amplify-field-group__outer-end .amplify-button {
+  background-color: #0d1117 !important;
+  border-color: #30363d !important;
+  color: #cccccc !important;
+}
+
+.amplify-field-group__outer-end .amplify-button:hover {
+  background-color: #1a2030 !important;
 }
