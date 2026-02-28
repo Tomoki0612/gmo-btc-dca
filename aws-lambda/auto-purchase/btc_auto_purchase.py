@@ -5,7 +5,9 @@ import time
 import requests
 import os
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+JST = timezone(timedelta(hours=9))
 
 # 環境変数から取得
 API_KEY = os.environ.get('GMO_API_KEY')
@@ -167,7 +169,7 @@ def lambda_handler(event, context):
     try:
         
         
-        print(f"積立開始: {datetime.now().isoformat()}")
+        print(f"積立開始: {datetime.now(JST).isoformat()}")
         print(f"積立金額: ¥{INVESTMENT_AMOUNT:,}")
         
         # 注文実行
@@ -182,7 +184,7 @@ def lambda_handler(event, context):
         
         message = f"""BTC積立が成功しました
 
-日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}
+日時: {datetime.now(JST).strftime('%Y年%m月%d日 %H:%M:%S')}
 積立金額: ¥{INVESTMENT_AMOUNT:,}
 BTC価格: ¥{btc_price:,.0f}
 購入数量: {btc_amount} BTC
@@ -212,7 +214,7 @@ BTC価格: ¥{btc_price:,.0f}
     except Exception as e:
         error_message = f"""BTC積立でエラーが発生しました
 
-日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}
+日時: {datetime.now(JST).strftime('%Y年%m月%d日 %H:%M:%S')}
 エラー内容: {str(e)}
 
 詳細はCloudWatch Logsを確認してください。
