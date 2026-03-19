@@ -26,5 +26,10 @@ samconfig.toml
 # Environment variables
 .env
 
+# Java / Gradle
+learn-bitcoinj/.gradle/
+learn-bitcoinj/build/
+*.class
+
 # Claude Code
 CLAUDE.md

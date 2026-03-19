@@ -1,0 +1,37 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.example'
+version = '1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // bitcoinj core library
+    implementation 'org.bitcoinj:bitcoinj-core:0.17.4'
+
+    // SLF4J logging
+    implementation 'org.slf4j:slf4j-simple:2.0.9'
+}
+
+// 各レッスンを個別に実行できるタスク
+// 例: ./gradlew runLesson1
+['1', '2', '3'].each { num ->
+    tasks.register("runLesson${num}", JavaExec) {
+        classpath = sourceSets.main.runtimeClasspath
+        mainClass = "com.example.bitcoinj.Lesson${num}"
+    }
+}
+
+application {
+    mainClass = 'com.example.bitcoinj.Lesson1'
+}
