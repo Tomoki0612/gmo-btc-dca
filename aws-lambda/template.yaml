@@ -3,25 +3,10 @@ Transform: AWS::Serverless-2016-10-31
 Description: BTC自動積立Lambda関数 - GMOコインAPIを使用した定期購入
 
 Parameters:
-  GmoApiKey:
-    Type: String
-    NoEcho: true
-    Description: GMOコインのAPIキー
-
-  GmoApiSecret:
-    Type: String
-    NoEcho: true
-    Description: GMOコインのAPIシークレット
-
-  InvestmentAmount:
-    Type: String
-    Default: "10000"
-    Description: 積立金額（円）
-
   ScheduleExpression:
     Type: String
-    Default: "cron(0 0 28 * ? *)"
-    Description: 実行スケジュール（デフォルト:毎月28日 UTC 0時 = JST 9時）
+    Default: "cron(0 * * * ? *)"
+    Description: 実行スケジュール（毎時0分に起動、実行判定はLambda側で実施）
 
   EnableSnsNotification:
     Type: String
@@ -62,9 +47,6 @@ Resources:
       Description: GMOコインでBTCを自動購入するLambda関数
       Environment:
         Variables:
-          GMO_API_KEY: !Ref GmoApiKey
-          GMO_API_SECRET: !Ref GmoApiSecret
-          INVESTMENT_AMOUNT: !Ref InvestmentAmount
           SNS_TOPIC_ARN: !If
             - CreateSnsResources
             - !Ref BtcPurchaseNotificationTopic
@@ -80,6 +62,10 @@ Resources:
                 - CreateSnsResources
                 - !Ref BtcPurchaseNotificationTopic
                 - !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:*"
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/btc-dca-settings"
       Events:
         ScheduledPurchase:
           Type: Schedule
