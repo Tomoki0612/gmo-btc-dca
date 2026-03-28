@@ -334,15 +334,17 @@ function MainApp({ signOut }) {
         </div>
         </div>
 
-        <button className="api-settings-button" onClick={() => navigateTo('api-settings')}>
-          API設定 →
-        </button>
+        <div className="bottom-buttons">
+          <button className="api-settings-button" onClick={() => navigateTo('api-settings')}>
+            API設定 →
+          </button>
 
-        <button className="change-password-button" onClick={() => navigateTo('password')}>
-          パスワードを変更する
-        </button>
+          <button className="change-password-button" onClick={() => navigateTo('password')}>
+            パスワードを変更する
+          </button>
 
-        <button className="signout-button" onClick={signOut}>サインアウト</button>
+          <button className="signout-button" onClick={signOut}>サインアウト</button>
+        </div>
       </header>
     </div>
   );
