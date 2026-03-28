@@ -9,24 +9,14 @@ from datetime import datetime, timezone, timedelta
 
 JST = timezone(timedelta(hours=9))
 
-# 環境変数から取得
-API_KEY = os.environ.get('GMO_API_KEY')
-API_SECRET = os.environ.get('GMO_API_SECRET')
+# DynamoDB クライアントの初期化
+dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
+table = dynamodb.Table("btc-dca-settings")
 SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN') 
-INVESTMENT_AMOUNT = os.environ.get('INVESTMENT_AMOUNT')# 積立金額（円）(3000あれば賈える)
 DRY_RUN = os.environ.get('DRY_RUN')
 
 # SNSクライアントの初期化
 sns = boto3.client('sns', region_name='ap-northeast-1')  # 東京リージョン
-
-# APIキーとシークレットキーが設定されているか確認
-if not API_KEY or not API_SECRET:
-    raise ValueError("GMO_API_KEY または GMO_API_SECRET が環境変数に設定されていません。")
-
-if not INVESTMENT_AMOUNT:
-    raise ValueError("金額が設定されていません")
-
-INVESTMENT_AMOUNT = int(INVESTMENT_AMOUNT)
 
 # APIキーとシークレットキーを出力（セキュリティ上の理由から一部のみ表示）
 '''
@@ -165,11 +155,47 @@ def place_order(amount_jpy):
 
 def lambda_handler(event, context):
     """Lambda関数のメインハンドラー"""
-    
     try:
-        
-        
-        print(f"積立開始: {datetime.now(JST).isoformat()}")
+        # DynamoDBから設定を取得
+        response = table.get_item(Key={"userId": "user1"})
+        settings = response.get("Item")
+        if not settings:
+            raise ValueError("設定が見つかりません")
+
+        global API_KEY, API_SECRET, INVESTMENT_AMOUNT
+        API_KEY = settings.get("apiKey")
+        API_SECRET = settings.get("apiSecret")
+        INVESTMENT_AMOUNT = int(settings.get("amount", 0))
+
+        now = datetime.now(JST)
+        frequency = settings.get("frequency")
+        schedule_day = settings.get("scheduleDay")
+        schedule_time = settings.get("scheduleTime")
+
+        if schedule_time is not None and now.hour != int(schedule_time):
+            print(f"実行時間外: 現在{now.hour}時 / 設定{schedule_time}時")
+            return {"statusCode": 200, "body": "スキップ（時間外）"}
+
+        if frequency == "weekly":
+            # Python: 月=0, 火=1 ... 日=6
+            # DynamoDB: 月=1, 火=2 ... 日=7
+            if schedule_day and now.weekday() + 1 != int(schedule_day):
+                print(f"実行曜日外: 現在{now.weekday()+1} / 設定{schedule_day}")
+                return {"statusCode": 200, "body": "スキップ（曜日外）"}
+
+        elif frequency == "monthly":
+            if schedule_day and now.day != int(schedule_day):
+                print(f"実行日外: 現在{now.day}日 / 設定{schedule_day}日")
+                return {"statusCode": 200, "body": "スキップ（日付外）"}
+
+        # daily の場合は時間が合えばそのまま実行
+
+        if not API_KEY or not API_SECRET:
+            raise ValueError("APIキーが設定されていません")
+        if not INVESTMENT_AMOUNT:
+            raise ValueError("金額が設定されていません")
+
+        print(f"積立開始: {datetime.now(JST).isoformat()}")    
         print(f"積立金額: ¥{INVESTMENT_AMOUNT:,}")
         
         # 注文実行
