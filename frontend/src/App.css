@@ -161,15 +161,23 @@ h1:focus {
   background-color: rgba(255, 255, 255, 0.05);
 }
 
+.bottom-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  margin-top: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .api-settings-button {
   padding: 8px 20px;
   font-size: 14px;
   background: none;
-  border: 1px solid #30363d;
+  border: 1px solid #555;
   border-radius: 5px;
-  color: #aaa;
+  color: #888;
   cursor: pointer;
-  margin-top: 20px;
 }
 
 .api-settings-button:hover {
@@ -195,15 +203,14 @@ h1:focus {
   padding: 8px 20px;
   font-size: 14px;
   background: none;
-  border: 1px solid #f97316;
+  border: 1px solid #555;
   border-radius: 5px;
-  color: #f97316;
+  color: #888;
   cursor: pointer;
-  margin-top: 20px;
 }
 
 .change-password-button:hover {
-  background-color: rgba(249, 115, 22, 0.1);
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .password-buttons {
@@ -232,7 +239,6 @@ h1:focus {
   border-radius: 5px;
   color: #888;
   cursor: pointer;
-  margin-top: 20px;
 }
 
 .input-hint {
