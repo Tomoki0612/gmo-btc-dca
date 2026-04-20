@@ -12,6 +12,7 @@ aws-lambda/*.zip
 .aws-sam/
 aws-lambda/.aws-sam/
 aws-lambda/env.json
+aws-lambda/**/env.json
 samconfig.toml
 
 # Logs
