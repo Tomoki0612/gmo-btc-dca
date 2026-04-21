@@ -299,7 +299,7 @@ function TimeField({ value, saved, onChange }) {
       currentDisplay={
         <DiffValue big changed={changed} before={fmtTime(saved)} after={fmtTime(value)} />
       }
-      footer={<div className="field-card__hint"><span>日本時間 (JST) ・ その時刻台に実行</span></div>}
+      footer={<div className="field-card__hint"><span>日本時間 (JST) </span></div>}
     >
       <div className="time-slider-wrap">
         <div className="time-rail">
@@ -359,8 +359,8 @@ function TopBar({ title, onBack, onMenu, center }) {
 
 function maskApiKey(key) {
   if (!key) return '';
-  const tail = key.slice(-4);
-  return `••••••••••••${tail}`;
+  const head = key.slice(0, 4);
+  return `${head}••••••••••••`;
 }
 
 function SettingsPage({ savedSettings, onNavigate, headingRef }) {
