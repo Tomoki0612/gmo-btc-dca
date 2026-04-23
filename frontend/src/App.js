@@ -44,7 +44,9 @@ const formFields = {
   },
 };
 
-const API_URL = 'https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod/settings';
+const API_BASE = 'https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_URL = `${API_BASE}/settings`;
+const BALANCE_URL = `${API_BASE}/balance`;
 
 const FREQ_LABEL = { daily: '毎日', weekly: '毎週', monthly: '毎月' };
 const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
@@ -363,6 +365,129 @@ function maskApiKey(key) {
   return `${head}••••••••••••`;
 }
 
+function BalanceCard({ apiConfigured }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [data, setData] = useState(null);
+  const [updated, setUpdated] = useState(null);
+
+  const load = async () => {
+    if (!apiConfigured) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(BALANCE_URL);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || '残高取得に失敗しました');
+      if (body.configured === false) {
+        setData(null);
+      } else {
+        setData(body);
+        setUpdated(new Date());
+      }
+    } catch (e) {
+      setError(e.message || '残高取得に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (apiConfigured) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiConfigured]);
+
+  const fmtUpd = (d) => (d
+    ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+    : '--:--:--');
+
+  if (!apiConfigured) {
+    return (
+      <section className="field-card balance-card">
+        <header className="field-card__head">
+          <div className="field-card__label">
+            <span className="field-card__icon" aria-hidden>$</span>
+            <span>取引所残高</span>
+          </div>
+        </header>
+        <div className="field-card__current">
+          <div className="api-status">
+            <span className="api-dot" />
+            APIキー未設定
+          </div>
+        </div>
+        <div className="field-card__footer">
+          <div className="field-card__hint">APIキーを設定すると残高が表示されます</div>
+        </div>
+      </section>
+    );
+  }
+
+  const btcInJpy = data ? Math.round(data.btc * data.btcJpyRate) : 0;
+  const total = data ? Math.round(data.jpy + btcInJpy) : 0;
+
+  return (
+    <section className="field-card balance-card">
+      <header className="field-card__head">
+        <div className="field-card__label">
+          <span className="field-card__icon" aria-hidden>$</span>
+          <span>取引所残高</span>
+        </div>
+        <button type="button" className="refresh-btn" onClick={load} aria-label="残高を更新" data-loading={loading} disabled={loading}>
+          <span aria-hidden>↻</span>
+          <span className="refresh-btn__txt">{fmtUpd(updated)}</span>
+        </button>
+      </header>
+
+      <div className="balance-total">
+        <span className="balance-total__label">評価額合計</span>
+        <span className="balance-total__value">{data ? fmtYen(total) : '—'}</span>
+      </div>
+
+      <div className="balance-rows">
+        <div className="balance-row">
+          <div className="balance-row__left">
+            <span className="asset-mark asset-mark--jpy" aria-hidden>¥</span>
+            <div>
+              <div className="balance-row__ticker">JPY</div>
+              <div className="balance-row__name">日本円</div>
+            </div>
+          </div>
+          <div className="balance-row__right">
+            <div className="balance-row__amount mono">{data ? Math.floor(data.jpy).toLocaleString('ja-JP') : '—'}</div>
+            <div className="balance-row__sub">円</div>
+          </div>
+        </div>
+
+        <div className="balance-row">
+          <div className="balance-row__left">
+            <span className="asset-mark asset-mark--btc" aria-hidden>₿</span>
+            <div>
+              <div className="balance-row__ticker">BTC</div>
+              <div className="balance-row__name">ビットコイン</div>
+            </div>
+          </div>
+          <div className="balance-row__right">
+            <div className="balance-row__amount mono">{data ? data.btc.toFixed(5) : '—'}</div>
+            <div className="balance-row__sub">{data ? `${btcInJpy.toLocaleString('ja-JP')}円` : '—'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="field-card__footer">
+        <div className="field-card__hint">
+          {data ? (
+            <>1 BTC = <span className="mono">{fmtYen(data.btcJpyRate)}</span> ・ GMOコイン</>
+          ) : (
+            <>GMOコイン</>
+          )}
+          {error && <span className="balance-error"> ・ {error}</span>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function SettingsPage({ savedSettings, onNavigate, headingRef }) {
   const hasSaved = !!savedSettings;
   const savedAmount = savedSettings?.amount ?? 0;
@@ -475,6 +600,8 @@ function SettingsPage({ savedSettings, onNavigate, headingRef }) {
           onChangeDay={setScheduleDay}
         />
         <TimeField value={scheduleTime} saved={savedTime} onChange={setScheduleTime} />
+
+        <BalanceCard apiConfigured={apiConfigured} />
 
         <FieldCard
           label="GMOコイン API"
