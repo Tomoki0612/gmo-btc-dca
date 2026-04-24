@@ -47,6 +47,7 @@ const formFields = {
 const API_BASE = 'https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod';
 const API_URL = `${API_BASE}/settings`;
 const BALANCE_URL = `${API_BASE}/balance`;
+const HISTORY_URL = `${API_BASE}/history`;
 
 const FREQ_LABEL = { daily: '毎日', weekly: '毎週', monthly: '毎月' };
 const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
@@ -572,9 +573,7 @@ function SettingsPage({ savedSettings, onNavigate, headingRef }) {
   const apiConfigured = !!(savedSettings?.apiKey && savedSettings?.apiSecret);
 
   return (
-    <div className="app">
-      <TopBar onMenu={() => onNavigate('menu')} />
-
+    <>
       <section className="hero-preview">
         <div className="hero-preview__label">次回の積立</div>
         <h1 ref={headingRef} tabIndex={-1} className="hero-preview__value">
@@ -664,6 +663,289 @@ function SettingsPage({ savedSettings, onNavigate, headingRef }) {
           {toast}
         </div>
       )}
+    </>
+  );
+}
+
+const FIELD_LABEL = { time: '積立時間', amount: '積立金額', schedule: 'スケジュール', api: 'API設定' };
+
+function fmtHistDate(iso) {
+  const d = new Date(iso);
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+  return `${d.getFullYear()}/${m}/${day}(${wd}) ${h}:${min}`;
+}
+function fmtDateShort(iso) {
+  const d = new Date(iso);
+  const day = d.getDate();
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+  return { day, wd };
+}
+function fmtTimeShort(iso) {
+  const d = new Date(iso);
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${min}`;
+}
+function ymKey(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+}
+
+function HistoryItem({ item }) {
+  const { day, wd } = fmtDateShort(item.at);
+  const time = fmtTimeShort(item.at);
+
+  if (item.type === 'purchase') {
+    const ok = item.status === 'ok';
+    return (
+      <article className={`tl-row tl-row--purchase ${ok ? '' : 'tl-row--failed'}`}>
+        <div className="tl-date" aria-label={fmtHistDate(item.at)}>
+          <span className="tl-date__day mono">{day}</span>
+          <span className="tl-date__wd">{wd}</span>
+        </div>
+        <div className="tl-rail" aria-hidden>
+          <span className="tl-rail__dot"></span>
+        </div>
+        <div className="tl-body">
+          {ok ? (
+            <>
+              <div className="tl-line">
+                <span className="tl-amount mono">¥{Number(item.amount).toLocaleString('ja-JP')}</span>
+                <span className="tl-arrow" aria-hidden>→</span>
+                <span className="tl-btc mono">{Number(item.btc).toFixed(5)}<em>BTC</em></span>
+              </div>
+              <div className="tl-meta">
+                <span className="tl-meta__time mono">{time}</span>
+                {item.rate && (
+                  <>
+                    <span className="tl-meta__sep">·</span>
+                    <span className="tl-meta__rate">1BTC = <span className="mono">¥{Math.round(item.rate).toLocaleString('ja-JP')}</span></span>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="tl-line">
+                <span className="tl-fail-badge">失敗</span>
+                <span className="tl-fail-reason">{item.reason || 'エラー'}</span>
+              </div>
+              <div className="tl-meta">
+                <span className="tl-meta__time mono">{time}</span>
+                {item.amount != null && (
+                  <>
+                    <span className="tl-meta__sep">·</span>
+                    <span>¥{Number(item.amount).toLocaleString('ja-JP')} 予定</span>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <article className="tl-row tl-row--change">
+      <div className="tl-date" aria-label={fmtHistDate(item.at)}>
+        <span className="tl-date__day mono">{day}</span>
+        <span className="tl-date__wd">{wd}</span>
+      </div>
+      <div className="tl-rail" aria-hidden>
+        <span className="tl-rail__dot tl-rail__dot--change"></span>
+      </div>
+      <div className="tl-body">
+        <div className="tl-line tl-line--change">
+          <span className="tl-change-label">{FIELD_LABEL[item.field] || item.field}</span>
+          <span className="tl-change-diff">
+            <span className="tl-change-before">{item.before}</span>
+            <span className="tl-arrow" aria-hidden>→</span>
+            <span className="tl-change-after">{item.after}</span>
+          </span>
+        </div>
+        <div className="tl-meta">
+          <span className="tl-meta__time mono">{time}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function HistoryPage({ headingRef }) {
+  const [filter, setFilter] = useState('all');
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(HISTORY_URL);
+        if (!res.ok) throw new Error('履歴取得エラー');
+        const body = await res.json();
+        if (!cancelled) setItems(Array.isArray(body.items) ? body.items : []);
+      } catch (e) {
+        if (!cancelled) setError(e.message || '履歴取得エラー');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const counts = {
+    all: items.length,
+    purchase: items.filter((i) => i.type === 'purchase').length,
+    change: items.filter((i) => i.type === 'change').length,
+  };
+
+  const filtered = items.filter((it) => (filter === 'all' ? true : it.type === filter));
+
+  const groups = [];
+  for (const it of filtered) {
+    const k = ymKey(it.at);
+    let g = groups.find((x) => x.key === k);
+    if (!g) { g = { key: k, items: [] }; groups.push(g); }
+    g.items.push(it);
+  }
+
+  const stats = items.reduce((acc, it) => {
+    if (it.type === 'purchase' && it.status === 'ok') {
+      acc.count += 1;
+      acc.totalJpy += Number(it.amount) || 0;
+      acc.totalBtc += Number(it.btc) || 0;
+    }
+    return acc;
+  }, { count: 0, totalJpy: 0, totalBtc: 0 });
+
+  return (
+    <main className="hist-main">
+      <h1 ref={headingRef} tabIndex={-1} className="visually-hidden">履歴</h1>
+
+      <section className="hist-stats">
+        <div className="hist-stats__primary">
+          <span className="hist-stats__label">累計</span>
+          <span className="hist-stats__btc">
+            <span className="mono">{stats.totalBtc.toFixed(5)}</span>
+            <em>BTC</em>
+          </span>
+        </div>
+        <div className="hist-stats__divider" aria-hidden></div>
+        <div className="hist-stats__secondary">
+          <div className="hist-stats__kv">
+            <span className="hist-stats__l">投入額</span>
+            <span className="hist-stats__r mono">¥{stats.totalJpy.toLocaleString('ja-JP')}</span>
+          </div>
+          <div className="hist-stats__kv">
+            <span className="hist-stats__l">実行</span>
+            <span className="hist-stats__r mono">{stats.count}<em>回</em></span>
+          </div>
+        </div>
+      </section>
+
+      <div className="hist-filter" role="tablist" aria-label="履歴フィルタ">
+        {[
+          { k: 'all', label: 'すべて' },
+          { k: 'purchase', label: '積立' },
+          { k: 'change', label: '設定変更' },
+        ].map((f) => (
+          <button
+            key={f.k}
+            type="button"
+            role="tab"
+            aria-selected={filter === f.k}
+            className="hist-filter__item"
+            data-active={filter === f.k}
+            onClick={() => setFilter(f.k)}
+          >
+            <span>{f.label}</span>
+            <span className="hist-filter__count">{counts[f.k]}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading && <div className="hist-empty">読み込み中…</div>}
+      {!loading && error && <div className="hist-empty">{error}</div>}
+      {!loading && !error && groups.length === 0 && (
+        <div className="hist-empty">該当する履歴がありません</div>
+      )}
+
+      {groups.map((g) => (
+        <section key={g.key} className="hist-month">
+          <h2 className="hist-month__title">{g.key}</h2>
+          <div className="hist-timeline">
+            {g.items.map((it) => (
+              <HistoryItem key={it.id} item={it} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </main>
+  );
+}
+
+function HomePage({ savedSettings, onNavigate, headingRef }) {
+  const [tab, setTab] = useState('settings');
+
+  return (
+    <div className="app">
+      <header className="top-bar">
+        <div className="top-bar__inner">
+          <div className="brand">
+            <span className="brand__mark" aria-hidden>₿</span>
+            <span className="brand__name">ツミビット</span>
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="メニュー"
+            onClick={() => onNavigate('menu')}
+          >
+            <span className="icon-btn__dot" />
+            <span className="icon-btn__dot" />
+            <span className="icon-btn__dot" />
+          </button>
+        </div>
+        <nav className="home-tabs" role="tablist" aria-label="画面切替">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'settings'}
+            className="home-tab"
+            data-active={tab === 'settings'}
+            onClick={() => setTab('settings')}
+          >
+            <span className="home-tab__icon" aria-hidden>◷</span>
+            <span>積立設定</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'history'}
+            className="home-tab"
+            data-active={tab === 'history'}
+            onClick={() => setTab('history')}
+          >
+            <span className="home-tab__icon" aria-hidden>⧗</span>
+            <span>履歴</span>
+          </button>
+        </nav>
+      </header>
+
+      {tab === 'settings' && (
+        <SettingsPage
+          savedSettings={savedSettings}
+          onNavigate={onNavigate}
+          headingRef={headingRef}
+        />
+      )}
+      {tab === 'history' && <HistoryPage headingRef={headingRef} />}
     </div>
   );
 }
@@ -671,7 +953,7 @@ function SettingsPage({ savedSettings, onNavigate, headingRef }) {
 function MenuPage({ onNavigate, onSignOut, headingRef }) {
   return (
     <div className="app">
-      <TopBar title="アカウント" center onBack={() => onNavigate('settings')} />
+      <TopBar title="アカウント" center onBack={() => onNavigate('home')} />
       <h1 ref={headingRef} tabIndex={-1} className="visually-hidden">アカウント</h1>
       <div className="menu-list">
         <button className="menu-item" onClick={() => onNavigate('api')}>
@@ -721,7 +1003,7 @@ function ApiPage({ savedSettings, onNavigate, onSaved, headingRef }) {
       if (!res.ok) throw new Error('API通信エラー');
       setSaved(true);
       onSaved(body);
-      setTimeout(() => onNavigate('settings'), 800);
+      setTimeout(() => onNavigate('home'), 800);
     } catch (e) {
       setError(e.message || '保存に失敗しました');
     } finally {
@@ -883,7 +1165,7 @@ function PasswordPage({ onNavigate, headingRef }) {
 }
 
 function MainApp({ signOut }) {
-  const [page, setPage] = useState('settings');
+  const [page, setPage] = useState('home');
   const [savedSettings, setSavedSettings] = useState(null);
   const headingRef = useRef(null);
 
@@ -917,12 +1199,17 @@ function MainApp({ signOut }) {
     setPage(next);
   };
 
+  const navigateAfterSave = (target, updated) => {
+    if (updated) setSavedSettings(updated);
+    setPage(target === 'settings' ? 'home' : target);
+  };
+
   return (
     <div className="root">
-      {page === 'settings' && (
-        <SettingsPage
+      {page === 'home' && (
+        <HomePage
           savedSettings={savedSettings}
-          onNavigate={navigate}
+          onNavigate={navigateAfterSave}
           headingRef={headingRef}
         />
       )}

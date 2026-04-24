@@ -1,6 +1,6 @@
 # settings-api デプロイ手順 (AWS CLI)
 
-`/balance` エンドポイント追加作業。`deploy.sh` を叩くだけで完了するように冪等化済み。
+`/balance` `/history` エンドポイント追加作業。`deploy.sh` を叩くだけで完了するように冪等化済み。
 
 ---
 
@@ -19,6 +19,31 @@
 - REST API ID: `5slu1ftn2g`
 - ステージ: `prod`
 - リージョン: `ap-northeast-1`
+
+---
+
+## 0. 前準備 — `btc-dca-history` テーブル
+
+履歴用 DynamoDB テーブルが必要。未作成なら下記で作成（auto-purchase 側の SAM でも同テーブルを作成するので、どちらか片方で十分）。
+
+```bash
+aws dynamodb create-table \
+  --region ap-northeast-1 \
+  --table-name btc-dca-history \
+  --attribute-definitions AttributeName=userId,AttributeType=S AttributeName=sk,AttributeType=S \
+  --key-schema AttributeName=userId,KeyType=HASH AttributeName=sk,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST
+```
+
+Lambda 実行ロール（`settings-api` 関数）に以下の権限を追加すること:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["dynamodb:Query", "dynamodb:PutItem"],
+  "Resource": "arn:aws:dynamodb:ap-northeast-1:<ACCOUNT_ID>:table/btc-dca-history"
+}
+```
 
 ---
 

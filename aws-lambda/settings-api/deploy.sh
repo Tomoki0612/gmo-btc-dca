@@ -168,12 +168,105 @@ JSON
 )" \
   >/dev/null
 
+echo "==> 9.5 /history リソースを取得または作成"
+HISTORY_ID=$(aws apigateway get-resources \
+  --region "$REGION" \
+  --rest-api-id "$REST_API_ID" \
+  --query "items[?path=='/history'].id" --output text)
+if [ -z "$HISTORY_ID" ] || [ "$HISTORY_ID" = "None" ]; then
+  HISTORY_ID=$(aws apigateway create-resource \
+    --region "$REGION" \
+    --rest-api-id "$REST_API_ID" \
+    --parent-id "$ROOT_ID" \
+    --path-part history \
+    --query id --output text)
+  echo "    created: $HISTORY_ID"
+else
+  echo "    exists: $HISTORY_ID"
+fi
+
+aws apigateway put-method \
+  --region "$REGION" \
+  --rest-api-id "$REST_API_ID" \
+  --resource-id "$HISTORY_ID" \
+  --http-method GET \
+  --authorization-type NONE \
+  >/dev/null 2>&1 || echo "    GET /history method already exists"
+
+aws apigateway put-integration \
+  --region "$REGION" \
+  --rest-api-id "$REST_API_ID" \
+  --resource-id "$HISTORY_ID" \
+  --http-method GET \
+  --type AWS_PROXY \
+  --integration-http-method POST \
+  --uri "$INTEGRATION_URI" \
+  >/dev/null
+
+aws lambda add-permission \
+  --region "$REGION" \
+  --function-name "$FUNCTION_NAME" \
+  --statement-id apigw-history-get \
+  --action lambda:InvokeFunction \
+  --principal apigateway.amazonaws.com \
+  --source-arn "arn:aws:execute-api:$REGION:$ACCOUNT_ID:$REST_API_ID/*/GET/history" \
+  >/dev/null 2>&1 || echo "    /history permission already exists"
+
+aws apigateway put-method \
+  --region "$REGION" \
+  --rest-api-id "$REST_API_ID" \
+  --resource-id "$HISTORY_ID" \
+  --http-method OPTIONS \
+  --authorization-type NONE \
+  >/dev/null 2>&1 || echo "    OPTIONS /history method already exists"
+
+aws apigateway put-method-response \
+  --region "$REGION" \
+  --rest-api-id "$REST_API_ID" \
+  --resource-id "$HISTORY_ID" \
+  --http-method OPTIONS \
+  --status-code 200 \
+  --response-parameters "$(cat <<'JSON'
+{
+  "method.response.header.Access-Control-Allow-Origin": true,
+  "method.response.header.Access-Control-Allow-Headers": true,
+  "method.response.header.Access-Control-Allow-Methods": true
+}
+JSON
+)" \
+  >/dev/null 2>&1 || echo "    OPTIONS /history method response already exists"
+
+aws apigateway put-integration \
+  --region "$REGION" \
+  --rest-api-id "$REST_API_ID" \
+  --resource-id "$HISTORY_ID" \
+  --http-method OPTIONS \
+  --type MOCK \
+  --request-templates '{"application/json":"{\"statusCode\":200}"}' \
+  >/dev/null
+
+aws apigateway put-integration-response \
+  --region "$REGION" \
+  --rest-api-id "$REST_API_ID" \
+  --resource-id "$HISTORY_ID" \
+  --http-method OPTIONS \
+  --status-code 200 \
+  --response-parameters "$(cat <<'JSON'
+{
+  "method.response.header.Access-Control-Allow-Origin": "'*'",
+  "method.response.header.Access-Control-Allow-Headers": "'Content-Type'",
+  "method.response.header.Access-Control-Allow-Methods": "'GET,OPTIONS'"
+}
+JSON
+)" \
+  >/dev/null
+
 echo "==> 10. ${STAGE} ステージへデプロイ"
 aws apigateway create-deployment \
   --region "$REGION" \
   --rest-api-id "$REST_API_ID" \
   --stage-name "$STAGE" \
-  --description "add /balance endpoint" \
+  --description "add /balance and /history endpoints" \
   >/dev/null
 
 echo ""

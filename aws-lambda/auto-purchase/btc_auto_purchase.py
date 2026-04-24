@@ -2,18 +2,50 @@ import json
 import hmac
 import hashlib
 import time
+import uuid
 import requests
 import os
 import boto3
 from datetime import datetime, timezone, timedelta
+from decimal import Decimal
 
 JST = timezone(timedelta(hours=9))
 
 # DynamoDB クライアントの初期化
 dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
 table = dynamodb.Table("btc-dca-settings")
-SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN') 
+history_table = dynamodb.Table("btc-dca-history")
+SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
 DRY_RUN = os.environ.get('DRY_RUN')
+
+USER_ID = "user1"
+
+
+def _put_purchase_history(status, amount_jpy, btc=None, rate=None, reason=None):
+    """積立実行の履歴を DynamoDB に記録する。"""
+    ts = int(time.time() * 1000)
+    sk = f"{ts:013d}#purchase#{uuid.uuid4().hex[:6]}"
+    item = {
+        "userId": USER_ID,
+        "sk": sk,
+        "id": sk,
+        "type": "purchase",
+        "at": datetime.now(JST).isoformat(timespec="seconds"),
+        "status": status,
+        "amount": int(amount_jpy) if amount_jpy is not None else None,
+    }
+    if btc is not None:
+        item["btc"] = Decimal(str(round(float(btc), 8)))
+    if rate is not None:
+        item["rate"] = Decimal(str(round(float(rate), 2)))
+    if reason:
+        item["reason"] = str(reason)[:200]
+
+    clean = {k: v for k, v in item.items() if v is not None}
+    try:
+        history_table.put_item(Item=clean)
+    except Exception as e:
+        print(f"購入履歴の保存に失敗: {e}")
 
 # SNSクライアントの初期化
 sns = boto3.client('sns', region_name='ap-northeast-1')  # 東京リージョン
@@ -220,12 +252,20 @@ BTC価格: ¥{btc_price:,.0f}
 """
         print(message)
         
+        # 履歴を保存（成功）
+        _put_purchase_history(
+            status="ok",
+            amount_jpy=INVESTMENT_AMOUNT,
+            btc=btc_amount,
+            rate=btc_price,
+        )
+
         # メール通知送信（成功）
         send_notification(
             subject="BTC積立成功",
             message=message
         )
-        
+
         return {
             'statusCode': 200,
             'body': json.dumps({
@@ -236,7 +276,7 @@ BTC価格: ¥{btc_price:,.0f}
                 'response': result
             }, ensure_ascii=False)
         }
-            
+
     except Exception as e:
         error_message = f"""BTC積立でエラーが発生しました
 
@@ -246,13 +286,24 @@ BTC価格: ¥{btc_price:,.0f}
 詳細はCloudWatch Logsを確認してください。
 """
         print(f"エラー発生: {str(e)}")
-        
+
+        # 履歴を保存（失敗）— スケジュールスキップ以外の本処理エラーのみ
+        try:
+            amount_for_history = INVESTMENT_AMOUNT if 'INVESTMENT_AMOUNT' in globals() else None
+        except Exception:
+            amount_for_history = None
+        _put_purchase_history(
+            status="failed",
+            amount_jpy=amount_for_history,
+            reason=str(e),
+        )
+
         # メール通知送信（エラー）
         send_notification(
             subject="BTC積立エラー",
             message=error_message
         )
-        
+
         return {
             'statusCode': 500,
             'body': json.dumps({
