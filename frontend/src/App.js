@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Authenticator, ThemeProvider, createTheme } from '@aws-amplify/ui-react';
-import { updatePassword, signOut } from 'aws-amplify/auth';
+import { updatePassword, signOut, associateWebAuthnCredential, listWebAuthnCredentials, deleteWebAuthnCredential } from 'aws-amplify/auth';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 import { I18n } from 'aws-amplify/utils';
@@ -16,6 +16,13 @@ I18n.putVocabulariesForLanguage('ja', {
   'Code': '確認コード',
   'New Password': '新しいパスワード',
   'Submit': '送信',
+  'Sign in with Passkey': 'パスキーでサインイン',
+  'Use a passkey instead': 'パスキーを使う',
+  'Register a passkey': 'パスキーを登録',
+  'Add a passkey': 'パスキーを追加',
+  'Continue with passkey': 'パスキーで続行',
+  'Scan with your authenticator app': '認証アプリでスキャンしてください',
+  'Copy and paste this secret key': 'このシークレットキーをコピー＆ペーストしてください',
 });
 I18n.setLanguage('ja');
 
@@ -972,6 +979,14 @@ function MenuPage({ onNavigate, onSignOut, headingRef }) {
           </span>
           <span className="chev" aria-hidden>›</span>
         </button>
+        <button className="menu-item" onClick={() => onNavigate('passkey')}>
+          <span className="menu-item__icon">❖</span>
+          <span className="menu-item__body">
+            <span className="menu-item__title">パスキー管理</span>
+            <span className="menu-item__sub">生体認証 / PIN でサインイン</span>
+          </span>
+          <span className="chev" aria-hidden>›</span>
+        </button>
         <button className="menu-item menu-item--danger" onClick={onSignOut}>
           <span className="menu-item__icon">⏻</span>
           <span className="menu-item__body">
@@ -1171,6 +1186,131 @@ function PasswordPage({ onNavigate, headingRef }) {
   );
 }
 
+function PasskeyPage({ onNavigate, headingRef }) {
+  const [credentials, setCredentials] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await listWebAuthnCredentials();
+      setCredentials(res.credentials || []);
+    } catch (e) {
+      setError('パスキー一覧の取得に失敗しました: ' + (e.message || ''));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2600);
+  };
+
+  const onAdd = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await associateWebAuthnCredential();
+      showToast('パスキーを登録しました');
+      await refresh();
+    } catch (e) {
+      if (e.name === 'NotAllowedError' || e.name === 'AbortError') {
+        // ユーザがブラウザのプロンプトを閉じた / キャンセルした場合は無音
+      } else {
+        setError('パスキーの登録に失敗しました: ' + (e.message || ''));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDelete = async (credentialId) => {
+    if (!window.confirm('このパスキーを削除しますか？\n削除後はこのデバイスのパスキーではサインインできなくなります。')) return;
+    setBusy(true);
+    setError('');
+    try {
+      await deleteWebAuthnCredential({ credentialId });
+      showToast('パスキーを削除しました');
+      await refresh();
+    } catch (e) {
+      setError('パスキーの削除に失敗しました: ' + (e.message || ''));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="app">
+      <TopBar title="パスキー管理" center onBack={() => onNavigate('menu')} />
+      <h1 ref={headingRef} tabIndex={-1} className="visually-hidden">パスキー管理</h1>
+      <main className="form-page">
+        <div className="callout">
+          <div className="callout__title">パスキーとは</div>
+          <div className="callout__body">
+            端末の生体認証（指紋・顔）や PIN を使ってサインインする仕組みです。登録すると、パスワードと TOTP の代わりにパスキーだけでサインインできます。
+          </div>
+        </div>
+
+        {loading ? (
+          <p>読み込み中…</p>
+        ) : credentials.length === 0 ? (
+          <div className="callout">
+            <div className="callout__body">登録済みのパスキーはありません。</div>
+          </div>
+        ) : (
+          <div className="menu-list" style={{ margin: 0, padding: 0 }}>
+            {credentials.map((c) => (
+              <div key={c.credentialId} className="menu-item" style={{ cursor: 'default' }}>
+                <span className="menu-item__icon">❖</span>
+                <span className="menu-item__body">
+                  <span className="menu-item__title">{c.friendlyCredentialName || 'パスキー'}</span>
+                  <span className="menu-item__sub">
+                    {c.createdAt ? `登録日: ${new Date(c.createdAt).toLocaleDateString('ja-JP')}` : ''}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="text-btn"
+                  disabled={busy}
+                  onClick={() => onDelete(c.credentialId)}
+                  style={{ color: 'var(--red)' }}
+                >
+                  削除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="btn btn--primary btn--block"
+          disabled={busy}
+          onClick={onAdd}
+        >
+          {busy ? '処理中…' : 'パスキーを追加する'}
+        </button>
+        {error && <p className="error-message" role="alert">{error}</p>}
+      </main>
+      {toast && (
+        <div className="toast" role="status">
+          <span className="toast__check" aria-hidden>✓</span>
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MainApp({ signOut }) {
   const [page, setPage] = useState('home');
   const [savedSettings, setSavedSettings] = useState(null);
@@ -1234,6 +1374,9 @@ function MainApp({ signOut }) {
       {page === 'password' && (
         <PasswordPage onNavigate={navigate} headingRef={headingRef} />
       )}
+      {page === 'passkey' && (
+        <PasskeyPage onNavigate={navigate} headingRef={headingRef} />
+      )}
     </div>
   );
 }
@@ -1252,7 +1395,15 @@ const components = {
 function App() {
   return (
     <ThemeProvider theme={theme}>
-      <Authenticator hideSignUp formFields={formFields} components={components}>
+      <Authenticator
+        hideSignUp
+        formFields={formFields}
+        components={components}
+        passwordless={{
+          preferredAuthMethod: 'WEB_AUTHN',
+          passkeyRegistrationPrompts: { afterSignin: 'ALWAYS' },
+        }}
+      >
         {({ signOut }) => <MainApp signOut={signOut} />}
       </Authenticator>
     </ThemeProvider>
