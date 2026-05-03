@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Authenticator, ThemeProvider, createTheme } from '@aws-amplify/ui-react';
-import { updatePassword } from 'aws-amplify/auth';
+import { updatePassword, signOut } from 'aws-amplify/auth';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 import { I18n } from 'aws-amplify/utils';
@@ -1099,8 +1099,15 @@ function PasswordPage({ onNavigate, headingRef }) {
     setSuccess('');
     try {
       await updatePassword({ oldPassword: cur, newPassword: next });
-      setSuccess('パスワードを変更しました');
+      setSuccess('パスワードを変更しました。安全のため全デバイスからサインアウトします…');
       setCur(''); setNext(''); setConf('');
+      try {
+        await new Promise((r) => setTimeout(r, 1500));
+        await signOut({ global: true });
+      } catch (signOutErr) {
+        setSuccess('');
+        setError('全デバイスからのサインアウトに失敗しました。お手数ですがメニューから手動でサインアウトしてください。');
+      }
     } catch (e) {
       if (e.name === 'NotAuthorizedException') {
         setError('現在のパスワードが正しくありません');
