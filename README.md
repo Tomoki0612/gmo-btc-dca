@@ -118,6 +118,46 @@ cron(0 0 28 * ? *)  # 毎月28日UTC 0時 = JST 9時
 - AWSの場合はLambda環境変数に保存
 - コードにAPIキーを直接書き込まない
 
+## 認証設定（Cognito User Pool）
+
+ツミビット Web UI は AWS Cognito を使用しています。以下の設定を AWS Console から行うことで、TOTP 多要素認証の強制とパスキー（WebAuthn）でのサインインが有効になります。
+
+対象 User Pool ID: `ap-northeast-1_4R5AGWXtg`
+
+### 1. TOTP MFA を必須化
+
+1. AWS Console → Cognito → User pools → 対象プールを選択
+2. 左メニュー「**Sign-in**」→「**Multi-factor authentication**」セクションの「Edit」
+3. 「MFA enforcement」を **Require MFA** に変更
+4. 「MFA methods」で **Authenticator apps** にチェック（SMS は不要なら外す）
+5. 保存
+
+これにより既存ユーザは次回ログイン時に TOTP セットアップ画面（QR コード）が強制的に表示され、設定するまでサインインできなくなります。
+
+### 2. パスキー（WebAuthn）を有効化
+
+1. 同じ User pool の「**Sign-in**」→「**Passkey**」または「**Passwordless sign-in**」セクション
+2. 「Enable passkey sign-in」を ON
+3. **Relying party ID** に本番ドメイン（例: `tsumibit.example.com`）を入力
+   - ローカル開発時は `localhost` で動作
+4. **User verification** は **Required** を推奨
+5. 保存
+
+### 3. App client で USER_AUTH フローを有効化
+
+1. 「**App integration**」タブ → App client を選択
+2. 「Authentication flows」を編集
+3. **ALLOW_USER_AUTH**（USER_AUTH flow）を有効化
+4. 既存の **ALLOW_USER_PASSWORD_AUTH** または **ALLOW_USER_SRP_AUTH** はパスワード+TOTP の通常サインイン用に維持
+5. 保存
+
+### 動作確認
+
+- 初回サインイン時: メール+パスワードでログイン → TOTP の QR コードが表示される → 認証アプリ（Google Authenticator 等）で読み取り → 6 桁コードを入力 → ログイン完了
+- 二回目以降: メール+パスワード+TOTP でログイン
+- パスキー登録: ログイン後「アカウント → パスキー管理 → パスキーを追加」から登録
+- パスキーでサインイン: ログイン画面の「パスキーでサインイン」ボタンを使用（パスワード・TOTP 不要）
+
 ## 免責事項
 
 このシステムを使用したことによる損失について、開発者は一切の責任を負いません。投資は自己責任で行ってください。
