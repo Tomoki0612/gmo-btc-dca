@@ -1,0 +1,10 @@
+[Unit]
+Description=BTC DCA daily backup trigger
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+Unit=btc-dca-backup.service
+
+[Install]
+WantedBy=timers.target

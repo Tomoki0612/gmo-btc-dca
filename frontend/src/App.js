@@ -1,50 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Authenticator, ThemeProvider, createTheme } from '@aws-amplify/ui-react';
-import { updatePassword, signOut } from 'aws-amplify/auth';
-import '@aws-amplify/ui-react/styles.css';
 import './App.css';
-import { I18n } from 'aws-amplify/utils';
 
-I18n.putVocabulariesForLanguage('ja', {
-  'Sign In': 'ログイン',
-  'Sign in': 'ログイン',
-  'Forgot your password?': 'パスワードをお忘れですか？',
-  'Reset Password': 'パスワードをリセット',
-  'Email': 'メールアドレス',
-  'Send code': 'コードを送信',
-  'Back to Sign In': 'ログイン画面に戻る',
-  'Code': '確認コード',
-  'New Password': '新しいパスワード',
-  'Submit': '送信',
-});
-I18n.setLanguage('ja');
-
-const theme = createTheme({
-  tokens: {
-    colors: {
-      brand: {
-        primary: {
-          '10': { value: '#fff3e0' },
-          '20': { value: '#ffe0b2' },
-          '40': { value: '#ffb74d' },
-          '60': { value: '#f97316' },
-          '80': { value: '#ea6a0a' },
-          '90': { value: '#d45d00' },
-          '100': { value: '#bf5000' },
-        },
-      },
-    },
-  },
-});
-
-const formFields = {
-  signIn: {
-    username: { label: 'メールアドレス', placeholder: 'メールアドレスを入力' },
-    password: { label: 'パスワード', placeholder: 'パスワードを入力' },
-  },
-};
-
-const API_BASE = 'https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_BASE = '/api';
 const API_URL = `${API_BASE}/settings`;
 const BALANCE_URL = `${API_BASE}/balance`;
 const HISTORY_URL = `${API_BASE}/history`;
@@ -950,7 +907,7 @@ function HomePage({ savedSettings, onNavigate, headingRef }) {
   );
 }
 
-function MenuPage({ onNavigate, onSignOut, headingRef }) {
+function MenuPage({ onNavigate, headingRef }) {
   return (
     <div className="app">
       <TopBar title="アカウント" center onBack={() => onNavigate('home')} />
@@ -963,20 +920,6 @@ function MenuPage({ onNavigate, onSignOut, headingRef }) {
             <span className="menu-item__sub">取引APIキー / シークレット</span>
           </span>
           <span className="chev" aria-hidden>›</span>
-        </button>
-        <button className="menu-item" onClick={() => onNavigate('password')}>
-          <span className="menu-item__icon">⚿</span>
-          <span className="menu-item__body">
-            <span className="menu-item__title">パスワードを変更</span>
-            <span className="menu-item__sub">ツミビットのログインパスワード</span>
-          </span>
-          <span className="chev" aria-hidden>›</span>
-        </button>
-        <button className="menu-item menu-item--danger" onClick={onSignOut}>
-          <span className="menu-item__icon">⏻</span>
-          <span className="menu-item__body">
-            <span className="menu-item__title">サインアウト</span>
-          </span>
         </button>
       </div>
     </div>
@@ -1072,106 +1015,7 @@ function ApiPage({ savedSettings, onNavigate, onSaved, headingRef }) {
   );
 }
 
-function PasswordPage({ onNavigate, headingRef }) {
-  const [cur, setCur] = useState('');
-  const [next, setNext] = useState('');
-  const [conf, setConf] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const reqs = [
-    { k: 'len', ok: next.length >= 8, label: '8文字以上' },
-    { k: 'upper', ok: /[A-Z]/.test(next), label: '大文字' },
-    { k: 'lower', ok: /[a-z]/.test(next), label: '小文字' },
-    { k: 'num', ok: /[0-9]/.test(next), label: '数字' },
-    { k: 'sym', ok: /[^A-Za-z0-9]/.test(next), label: '記号' },
-  ];
-  const allOk = reqs.every((r) => r.ok);
-  const match = conf.length > 0 && next === conf;
-  const canSave = cur && allOk && match && !busy;
-  const strength = reqs.filter((r) => r.ok).length;
-
-  const submit = async () => {
-    if (!canSave) return;
-    setBusy(true);
-    setError('');
-    setSuccess('');
-    try {
-      await updatePassword({ oldPassword: cur, newPassword: next });
-      setSuccess('パスワードを変更しました。安全のため全デバイスからサインアウトします…');
-      setCur(''); setNext(''); setConf('');
-      try {
-        await new Promise((r) => setTimeout(r, 1500));
-        await signOut({ global: true });
-      } catch (signOutErr) {
-        setSuccess('');
-        setError('全デバイスからのサインアウトに失敗しました。お手数ですがメニューから手動でサインアウトしてください。');
-      }
-    } catch (e) {
-      if (e.name === 'NotAuthorizedException') {
-        setError('現在のパスワードが正しくありません');
-      } else if (e.name === 'InvalidPasswordException') {
-        setError('パスワードの形式が正しくありません');
-      } else {
-        setError('エラーが発生しました: ' + (e.message || ''));
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="app">
-      <TopBar title="パスワード変更" center onBack={() => onNavigate('menu')} />
-      <h1 ref={headingRef} tabIndex={-1} className="visually-hidden">パスワード変更</h1>
-      <main className="form-page">
-        <label className="input-block">
-          <span className="input-block__label">現在のパスワード</span>
-          <input type="password" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password" />
-        </label>
-
-        <label className="input-block">
-          <span className="input-block__label">新しいパスワード</span>
-          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
-          <div className="strength">
-            <div className="strength__bars">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <span key={i} className="strength__bar" data-on={i < strength} data-level={strength} />
-              ))}
-            </div>
-            <span className="strength__label">{['弱い', '弱い', '普通', '強い', '強い', '最強'][strength]}</span>
-          </div>
-          <ul className="reqs">
-            {reqs.map((r) => (
-              <li key={r.k} data-ok={r.ok}>
-                <span className="reqs__check">{r.ok ? '✓' : '○'}</span>{r.label}
-              </li>
-            ))}
-          </ul>
-        </label>
-
-        <label className="input-block">
-          <span className="input-block__label">新しいパスワード（確認）</span>
-          <input type="password" value={conf} onChange={(e) => setConf(e.target.value)} autoComplete="new-password" />
-          {conf && (
-            <span className={`input-block__hint ${match ? 'ok' : 'err'}`}>
-              {match ? '✓ 一致' : '一致しません'}
-            </span>
-          )}
-        </label>
-
-        <button type="button" className="btn btn--primary btn--block" disabled={!canSave} onClick={submit}>
-          {busy ? '変更中…' : 'パスワードを変更する'}
-        </button>
-        {error && <p className="error-message" role="alert">{error}</p>}
-        {success && <p className="success-message" role="status">{success}</p>}
-      </main>
-    </div>
-  );
-}
-
-function MainApp({ signOut }) {
+function MainApp() {
   const [page, setPage] = useState('home');
   const [savedSettings, setSavedSettings] = useState(null);
   const headingRef = useRef(null);
@@ -1221,7 +1065,7 @@ function MainApp({ signOut }) {
         />
       )}
       {page === 'menu' && (
-        <MenuPage onNavigate={navigate} onSignOut={signOut} headingRef={headingRef} />
+        <MenuPage onNavigate={navigate} headingRef={headingRef} />
       )}
       {page === 'api' && (
         <ApiPage
@@ -1231,32 +1075,8 @@ function MainApp({ signOut }) {
           headingRef={headingRef}
         />
       )}
-      {page === 'password' && (
-        <PasswordPage onNavigate={navigate} headingRef={headingRef} />
-      )}
     </div>
   );
 }
 
-const components = {
-  Header() {
-    return (
-      <div className="auth-header">
-        <h1>ツミビット</h1>
-        <p>BTC自動積立サービス</p>
-      </div>
-    );
-  },
-};
-
-function App() {
-  return (
-    <ThemeProvider theme={theme}>
-      <Authenticator hideSignUp formFields={formFields} components={components}>
-        {({ signOut }) => <MainApp signOut={signOut} />}
-      </Authenticator>
-    </ThemeProvider>
-  );
-}
-
-export default App;
+export default MainApp;

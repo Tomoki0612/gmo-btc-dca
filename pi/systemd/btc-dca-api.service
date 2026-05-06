@@ -1,0 +1,23 @@
+[Unit]
+Description=BTC DCA FastAPI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=btcdca
+Group=btcdca
+WorkingDirectory=/opt/btc-dca
+Environment=PYTHONUNBUFFERED=1
+Environment=BTC_DCA_DB=/var/lib/btc-dca/dca.sqlite
+ExecStart=/opt/btc-dca/.venv/bin/uvicorn pi.api.main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/btc-dca
+
+[Install]
+WantedBy=multi-user.target
