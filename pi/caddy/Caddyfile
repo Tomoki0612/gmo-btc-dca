@@ -1,0 +1,22 @@
+{
+    auto_https off
+}
+
+:80 {
+    encode gzip
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle {
+        root * /opt/btc-dca/frontend/build
+        try_files {path} /index.html
+        file_server
+    }
+
+    log {
+        output file /var/log/caddy/btc-dca.log
+        format json
+    }
+}

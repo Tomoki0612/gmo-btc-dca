@@ -1,0 +1,12 @@
+[Unit]
+Description=BTC DCA hourly trigger
+
+[Timer]
+OnCalendar=*-*-* *:00:00
+Persistent=true
+RandomizedDelaySec=30
+AccuracySec=10s
+Unit=btc-dca-purchase.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=BTC DCA SQLite daily backup
+After=btc-dca-api.service
+
+[Service]
+Type=oneshot
+User=btcdca
+Group=btcdca
+ExecStartPre=/usr/bin/install -d -m 0700 -o btcdca -g btcdca /var/lib/btc-dca/backups
+ExecStart=/bin/sh -c '/usr/bin/sqlite3 /var/lib/btc-dca/dca.sqlite ".backup /var/lib/btc-dca/backups/dca-$(date +%%F).sqlite"'
+ExecStartPost=/usr/bin/find /var/lib/btc-dca/backups -name 'dca-*.sqlite' -mtime +14 -delete
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/btc-dca

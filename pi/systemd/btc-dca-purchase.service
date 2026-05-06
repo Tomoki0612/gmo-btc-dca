@@ -1,0 +1,20 @@
+[Unit]
+Description=BTC DCA hourly purchase check
+After=network-online.target btc-dca-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=btcdca
+Group=btcdca
+WorkingDirectory=/opt/btc-dca
+Environment=PYTHONUNBUFFERED=1
+Environment=BTC_DCA_DB=/var/lib/btc-dca/dca.sqlite
+Environment=DRY_RUN=false
+EnvironmentFile=-/etc/btc-dca/secrets.env
+ExecStart=/opt/btc-dca/.venv/bin/python -m pi.purchase.run_purchase
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/btc-dca

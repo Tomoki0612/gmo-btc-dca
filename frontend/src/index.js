@@ -1,18 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { Amplify } from 'aws-amplify';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
-
-Amplify.configure({
-  Auth: {
-    Cognito: {
-      userPoolId: 'ap-northeast-1_4R5AGWXtg',
-      userPoolClientId: '6icknk5b5htbb5e7kbciktej45',
-    }
-  }
-});
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
