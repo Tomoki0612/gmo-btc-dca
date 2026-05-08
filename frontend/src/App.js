@@ -294,6 +294,7 @@ function ScheduleField({ frequency, day, savedFrequency, savedDay, onChangeFreq,
 
 function TimeField({ value, saved, onChange }) {
   const changed = value !== saved;
+  const cur = value ?? 0;
   return (
     <FieldCard
       label="積立時間"
@@ -304,29 +305,34 @@ function TimeField({ value, saved, onChange }) {
       }
       footer={<div className="field-card__hint"><span>日本時間 (JST) </span></div>}
     >
-      <div className="time-slider-wrap">
-        <div className="time-rail">
-          <div className="time-rail__markers" aria-hidden>
-            {[0, 6, 12, 18, 23].map((h) => (
-              <span key={h} style={{ left: `${(h / 23) * 100}%` }}>{h}時</span>
-            ))}
+      <div className="time-edit">
+        <div className="time-edit__editor">
+          <button type="button" className="time-step" aria-label="1時間戻す" onClick={() => onChange((cur - 1 + 24) % 24)}>−</button>
+          <div className="time-edit__display">
+            <span className="time-edit__value mono">{String(cur).padStart(2, '0')}</span>
+            <span className="time-edit__sep">:</span>
+            <span className="time-edit__value mono">00</span>
           </div>
-          <input
-            type="range"
-            min="0"
-            max="23"
-            step="1"
-            value={value ?? 0}
-            onChange={(e) => onChange(parseInt(e.target.value, 10))}
-            style={{ '--t': `${((value ?? 0) / 23) * 100}%` }}
-            aria-label="時刻スライダー"
-          />
+          <button type="button" className="time-step" aria-label="1時間進める" onClick={() => onChange((cur + 1) % 24)}>+</button>
         </div>
-        <div className="day-night" aria-hidden>
-          <span className={value >= 5 && value < 11 ? 'on' : ''}>☀︎ 朝</span>
-          <span className={value >= 11 && value < 17 ? 'on' : ''}>◎ 昼</span>
-          <span className={value >= 17 && value < 21 ? 'on' : ''}>◐ 夕</span>
-          <span className={value >= 21 || value < 5 ? 'on' : ''}>☾ 夜</span>
+        <div className="time-presets">
+          {[
+            { h: 7, label: '朝' },
+            { h: 12, label: '昼' },
+            { h: 18, label: '夕方' },
+            { h: 21, label: '夜' },
+          ].map((p) => (
+            <button
+              key={p.h}
+              type="button"
+              className="time-preset"
+              data-active={cur === p.h}
+              onClick={() => onChange(p.h)}
+            >
+              <span className="time-preset__label">{p.label}</span>
+              <span className="time-preset__hour mono">{p.h}:00</span>
+            </button>
+          ))}
         </div>
       </div>
     </FieldCard>
@@ -455,8 +461,11 @@ function BalanceCard({ apiConfigured }) {
             </div>
           </div>
           <div className="balance-row__right">
-            <div className="balance-row__amount mono">{data ? Math.floor(data.jpy).toLocaleString('ja-JP') : '—'}</div>
-            <div className="balance-row__sub">円</div>
+            <div className="balance-row__amount mono">
+              {data ? Math.floor(data.jpy).toLocaleString('ja-JP') : '—'}
+              {data && <span className="balance-row__unit">円</span>}
+            </div>
+            <div className="balance-row__sub" style={{ visibility: 'hidden' }}>—</div>
           </div>
         </div>
 
@@ -469,7 +478,10 @@ function BalanceCard({ apiConfigured }) {
             </div>
           </div>
           <div className="balance-row__right">
-            <div className="balance-row__amount mono">{data ? data.btc.toFixed(5) : '—'}</div>
+            <div className="balance-row__amount mono">
+              {data ? data.btc.toFixed(5) : '—'}
+              {data && <span className="balance-row__unit">BTC</span>}
+            </div>
             <div className="balance-row__sub">{data ? `${btcInJpy.toLocaleString('ja-JP')}円` : '—'}</div>
           </div>
         </div>
@@ -714,6 +726,7 @@ function HistoryItem({ item }) {
           {ok ? (
             <>
               <div className="tl-line">
+                <span className="tl-ok-badge">成功</span>
                 <span className="tl-amount mono">¥{Number(item.amount).toLocaleString('ja-JP')}</span>
                 <span className="tl-arrow" aria-hidden>→</span>
                 <span className="tl-btc mono">{Number(item.btc).toFixed(5)}<em>BTC</em></span>
@@ -750,6 +763,8 @@ function HistoryItem({ item }) {
     );
   }
 
+  const changes = item.changes || [{ field: item.field, before: item.before, after: item.after }];
+
   return (
     <article className="tl-row tl-row--change">
       <div className="tl-date" aria-label={fmtHistDate(item.at)}>
@@ -761,16 +776,24 @@ function HistoryItem({ item }) {
       </div>
       <div className="tl-body">
         <div className="tl-line tl-line--change">
-          <span className="tl-change-label">{FIELD_LABEL[item.field] || item.field}</span>
-          <span className="tl-change-diff">
-            <span className="tl-change-before">{item.before}</span>
-            <span className="tl-arrow" aria-hidden>→</span>
-            <span className="tl-change-after">{item.after}</span>
-          </span>
+          <span className="tl-change-badge">設定変更</span>
+          <span className="tl-change-summary">{changes.length}項目を変更</span>
         </div>
         <div className="tl-meta">
           <span className="tl-meta__time mono">{time}</span>
         </div>
+        <ul className="tl-change-list">
+          {changes.map((c, i) => (
+            <li key={i} className="tl-change-list__item">
+              <span className="tl-change-field">{FIELD_LABEL[c.field] || c.field}</span>
+              <span className="tl-change-diff">
+                <span className="tl-change-before">{c.before}</span>
+                <span className="tl-arrow" aria-hidden>→</span>
+                <span className="tl-change-after">{c.after}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </article>
   );
@@ -951,11 +974,40 @@ function HomePage({ savedSettings, onNavigate, headingRef }) {
 }
 
 function MenuPage({ onNavigate, onSignOut, headingRef }) {
+  const [theme, setThemeState] = useState(() => window.tumibitTheme?.get() || 'system');
+  const setTheme = (m) => { window.tumibitTheme?.set(m); setThemeState(m); };
+  const themeHint = theme === 'system' ? 'システム設定に従う' : theme === 'light' ? 'ライトモード' : 'ダークモード';
+
   return (
     <div className="app">
       <TopBar title="アカウント" center onBack={() => onNavigate('home')} />
       <h1 ref={headingRef} tabIndex={-1} className="visually-hidden">アカウント</h1>
       <div className="menu-list">
+        <div className="theme-picker">
+          <div className="theme-picker__head">
+            <span className="theme-picker__label">外観</span>
+            <span className="theme-picker__hint">{themeHint}</span>
+          </div>
+          <div className="theme-picker__row">
+            {[
+              { k: 'light', label: 'ライト', icon: '☀' },
+              { k: 'dark', label: 'ダーク', icon: '☾' },
+              { k: 'system', label: 'システム', icon: '◐' },
+            ].map((t) => (
+              <button
+                key={t.k}
+                type="button"
+                className="theme-opt"
+                data-active={theme === t.k}
+                onClick={() => setTheme(t.k)}
+              >
+                <span className="theme-opt__icon" aria-hidden>{t.icon}</span>
+                <span className="theme-opt__label">{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <button className="menu-item" onClick={() => onNavigate('api')}>
           <span className="menu-item__icon">⚙</span>
           <span className="menu-item__body">

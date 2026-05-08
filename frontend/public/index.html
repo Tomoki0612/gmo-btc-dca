@@ -27,6 +27,24 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>ツミビット</title>
+    <script>
+      (function () {
+        var KEY = 'tumibit-theme';
+        var mq = window.matchMedia('(prefers-color-scheme: light)');
+        function apply(mode) {
+          var effective = mode === 'system' ? (mq.matches ? 'light' : 'dark') : mode;
+          document.documentElement.setAttribute('data-theme', effective);
+        }
+        window.tumibitTheme = {
+          get: function () { return localStorage.getItem(KEY) || 'system'; },
+          set: function (m) { localStorage.setItem(KEY, m); apply(m); },
+        };
+        apply(window.tumibitTheme.get());
+        mq.addEventListener('change', function () {
+          if (window.tumibitTheme.get() === 'system') apply('system');
+        });
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
