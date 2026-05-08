@@ -1,6 +1,28 @@
-# Getting Started with Create React App
+# Frontend (Create React App)
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+
+## Deployment
+
+本番は **Cloudflare Pages** で配信しています。`main` ブランチへの push で自動ビルド・デプロイされます。
+
+### Cloudflare Pages 設定
+
+| 項目 | 値 |
+|---|---|
+| Framework preset | Create React App |
+| Build command | `npm run build` |
+| Build output directory | `build` |
+| Root directory | `frontend` |
+| Node version (環境変数 `NODE_VERSION`) | `20` |
+
+### 移行時の手順
+
+1. Cloudflare ダッシュボード → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**
+2. このリポジトリを選択し、上記のビルド設定を入力
+3. デプロイ完了後、`https://<project>.pages.dev` でアクセス可能
+4. Cognito 認証 / API Gateway は CORS が `*` で許可されているため追加設定は不要
+5. AWS Amplify Hosting 側はアプリ削除、もしくはブランチの Auto build OFF で停止
 
 ## Available Scripts
 

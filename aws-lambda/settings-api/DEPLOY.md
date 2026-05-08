@@ -94,7 +94,7 @@ CORS プリフライト確認:
 
 ```bash
 curl -i -X OPTIONS \
-  -H 'Origin: https://main.d3jt59ecaltvq1.amplifyapp.com' \
+  -H 'Origin: https://<your-project>.pages.dev' \
   -H 'Access-Control-Request-Method: GET' \
   https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod/balance
 ```
@@ -105,7 +105,7 @@ curl -i -X OPTIONS \
 
 ## 3. フロント反映
 
-`main` ブランチに push すれば Amplify (`main.d3jt59ecaltvq1.amplifyapp.com`) が自動でビルド・デプロイします。
+`main` ブランチに push すれば Cloudflare Pages が自動でビルド・デプロイします（プロジェクト URL は `*.pages.dev`）。
 
 ---
 
