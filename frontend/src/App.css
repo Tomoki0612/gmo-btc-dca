@@ -1155,7 +1155,7 @@ input[type="range"]::-moz-range-track {
 .save-bar__inner {
   max-width: 760px;
   margin: 0 auto;
-  background: #1f2630;
+  background: var(--surface-2);
   border: 1px solid var(--accent-line);
   border-radius: 14px;
   padding: 14px 16px;
@@ -1163,7 +1163,7 @@ input[type="range"]::-moz-range-track {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 4px var(--accent-glow);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35), 0 0 0 4px var(--accent-glow);
 }
 .save-bar__summary {
   flex: 1;
