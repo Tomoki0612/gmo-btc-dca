@@ -990,7 +990,7 @@ input[type="range"]::-moz-range-track {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #f7931a;
+  background: var(--green);
   box-shadow: 0 0 0 3px var(--bg);
 }
 .tl-row--failed .tl-rail__dot { background: var(--red); }
