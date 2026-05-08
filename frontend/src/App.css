@@ -981,8 +981,6 @@ input[type="range"]::-moz-range-track {
   width: 2px;
   background: var(--border-soft);
 }
-.tl-row:first-child .tl-rail::before { top: 50%; }
-.tl-row:last-child .tl-rail::before { bottom: 50%; }
 .tl-rail__dot {
   position: relative;
   z-index: 1;
