@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Authenticator, ThemeProvider, createTheme } from '@aws-amplify/ui-react';
 import { updatePassword, signOut } from 'aws-amplify/auth';
 import '@aws-amplify/ui-react/styles.css';
@@ -913,6 +913,175 @@ function HistoryPage({ headingRef }) {
   );
 }
 
+const MEMPOOL_FEES_URL = 'https://mempool.space/api/v1/fees/recommended';
+const MEMPOOL_PRICES_URL = 'https://mempool.space/api/v1/prices';
+const TX_VBYTES = 140;
+const NORMAL_BASELINE_SATVB = 20;
+
+function levelFromSatVb(satvb) {
+  if (satvb < 10) return 'low';
+  if (satvb > 30) return 'high';
+  return 'normal';
+}
+
+function NetworkPage({ headingRef }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [data, setData] = useState(null);
+  const [updated, setUpdated] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [feesRes, priceRes] = await Promise.all([
+        fetch(MEMPOOL_FEES_URL),
+        fetch(MEMPOOL_PRICES_URL),
+      ]);
+      if (!feesRes.ok || !priceRes.ok) throw new Error('mempool.space からの取得に失敗しました');
+      const fees = await feesRes.json();
+      const price = await priceRes.json();
+      const btcJpy = Number(price?.JPY) || 0;
+      setData({ fees, btcJpy });
+      setUpdated(new Date());
+    } catch (e) {
+      setError(e.message || '取得に失敗しました');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading && !data) {
+    return (
+      <main className="net-main">
+        <h1 ref={headingRef} tabIndex={-1} className="visually-hidden">送金手数料</h1>
+        <div className="hist-empty">読み込み中…</div>
+      </main>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <main className="net-main">
+        <h1 ref={headingRef} tabIndex={-1} className="visually-hidden">送金手数料</h1>
+        <div className="hist-empty">{error}</div>
+        <button type="button" className="btn btn--ghost btn--block" onClick={load}>
+          ↻ 再試行
+        </button>
+      </main>
+    );
+  }
+
+  const fees = data.fees;
+  const btcJpy = data.btcJpy;
+  const halfHour = Number(fees.halfHourFee) || 0;
+  const level = levelFromSatVb(halfHour);
+  const levelLabel = level === 'low' ? '空いています' : level === 'high' ? '混雑しています' : '通常';
+
+  const toBtc = (satvb) => (satvb * TX_VBYTES) / 1e8;
+  const toJpy = (satvb) => Math.round(toBtc(satvb) * btcJpy);
+  const savingJpy = level === 'low'
+    ? Math.max(0, Math.round((NORMAL_BASELINE_SATVB - halfHour) * TX_VBYTES / 1e8 * btcJpy))
+    : 0;
+  const hasJpy = btcJpy > 0;
+
+  const speeds = [
+    { k: 'fast', label: '高速', desc: '次のブロックを狙う', eta: '〜10分', satvb: Number(fees.fastestFee) || 0 },
+    { k: 'normal', label: '標準', desc: '数ブロック以内', eta: '〜30分', satvb: halfHour, recommended: true },
+    { k: 'slow', label: '低速', desc: '急がない時に', eta: '〜1時間', satvb: Number(fees.hourFee) || 0 },
+  ];
+
+  return (
+    <main className="net-main">
+      <h1 ref={headingRef} tabIndex={-1} className="visually-hidden">送金手数料</h1>
+
+      <section className="net-hero" data-level={level}>
+        <div className="net-hero__head">
+          <span className="net-hero__label">Bitcoinネットワーク</span>
+          <span className="net-hero__chip">{levelLabel}</span>
+        </div>
+        <div className="net-hero__metric">
+          <span className="net-hero__num mono">{halfHour}</span>
+          <span className="net-hero__unit">sat/vB</span>
+        </div>
+        <div className="net-hero__sub">標準的な送金で取り込まれる手数料率（halfHourFee）</div>
+      </section>
+
+      {level === 'low' && (
+        <section className="net-tip">
+          <div className="net-tip__icon" aria-hidden>↗</div>
+          <div className="net-tip__body">
+            <div className="net-tip__title">今が送金のチャンスです</div>
+            <div className="net-tip__desc">
+              ネットワークが空いているので、外部ウォレットへの送金手数料が普段より<strong>大きく</strong>下がっています。まとまった送金を検討しているなら今がおすすめです。
+            </div>
+            {hasJpy && savingJpy > 0 && (
+              <div className="net-tip__cta">
+                <span className="net-tip__save mono">≒ ¥{savingJpy.toLocaleString('ja-JP')} 節約</span>
+                <span className="net-tip__sep">·</span>
+                <span className="net-tip__hint">通常時 {NORMAL_BASELINE_SATVB} sat/vB との差額</span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className="fee-list">
+        <h2 className="fee-list__title">送金スピード別の手数料 <span className="fee-card__desc">（{TX_VBYTES} vB送信の参考値）</span></h2>
+        {speeds.map((t) => (
+          <div key={t.k} className="fee-card" data-recommended={t.recommended}>
+            <div className="fee-card__head">
+              <div className="fee-card__title">
+                <span className="fee-card__label">{t.label}</span>
+                {t.recommended && <span className="fee-card__chip">推奨</span>}
+              </div>
+              <span className="fee-card__eta">{t.eta}</span>
+            </div>
+            <div className="fee-card__amounts">
+              <div className="fee-card__btc mono">
+                {toBtc(t.satvb).toFixed(5)} <span className="fee-card__unit">BTC</span>
+              </div>
+              {hasJpy && (
+                <div className="fee-card__jpy mono">≒ {toJpy(t.satvb).toLocaleString('ja-JP')}円</div>
+              )}
+            </div>
+            <div className="fee-card__rate">
+              <span className="mono">{t.satvb}</span> sat/vB ・ <span className="fee-card__desc">{t.desc}</span>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section className="net-meta">
+        {hasJpy && (
+          <div className="net-meta__row">
+            <span>1 BTC</span>
+            <span className="mono">¥{btcJpy.toLocaleString('ja-JP')}</span>
+          </div>
+        )}
+        <div className="net-meta__row">
+          <span>手数料率の取得元</span>
+          <span>mempool.space</span>
+        </div>
+        <div className="net-meta__row">
+          <span>BTC価格の取得元</span>
+          <span>mempool.space</span>
+        </div>
+        <div className="net-meta__row">
+          <span>最終更新</span>
+          <span>{updated ? updated.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+        </div>
+        <button type="button" className="btn btn--ghost btn--block" onClick={load} disabled={loading}>
+          {loading ? '更新中…' : '↻ 最新の状態に更新'}
+        </button>
+      </section>
+    </main>
+  );
+}
+
 function HomePage({ savedSettings, onNavigate, headingRef }) {
   const [tab, setTab] = useState('settings');
 
@@ -926,13 +1095,12 @@ function HomePage({ savedSettings, onNavigate, headingRef }) {
           </div>
           <button
             type="button"
-            className="icon-btn"
-            aria-label="メニュー"
+            className="avatar-btn"
+            aria-label="アカウントメニュー"
             onClick={() => onNavigate('menu')}
           >
-            <span className="icon-btn__dot" />
-            <span className="icon-btn__dot" />
-            <span className="icon-btn__dot" />
+            <span className="avatar-btn__initial">T</span>
+            <span className="avatar-btn__caret" aria-hidden>⌄</span>
           </button>
         </div>
         <nav className="home-tabs" role="tablist" aria-label="画面切替">
@@ -958,6 +1126,17 @@ function HomePage({ savedSettings, onNavigate, headingRef }) {
             <span className="home-tab__icon" aria-hidden>⧗</span>
             <span>履歴</span>
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'network'}
+            className="home-tab"
+            data-active={tab === 'network'}
+            onClick={() => setTab('network')}
+          >
+            <span className="home-tab__icon" aria-hidden>⇄</span>
+            <span>送金手数料</span>
+          </button>
         </nav>
       </header>
 
@@ -969,6 +1148,7 @@ function HomePage({ savedSettings, onNavigate, headingRef }) {
         />
       )}
       {tab === 'history' && <HistoryPage headingRef={headingRef} />}
+      {tab === 'network' && <NetworkPage headingRef={headingRef} />}
     </div>
   );
 }

@@ -128,6 +128,40 @@ h1:focus { outline: none; }
 .icon-btn__dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; display: block; margin: 1.5px 0; }
 .icon-btn:hover { background: var(--surface); color: var(--text); }
 
+.avatar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.avatar-btn:hover {
+  border-color: var(--accent-line);
+  background: var(--surface-2);
+}
+.avatar-btn__initial {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-600));
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  letter-spacing: 0.02em;
+}
+.avatar-btn__caret {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1;
+  margin-top: -2px;
+}
+
 .text-btn {
   background: transparent; border: none; color: var(--text-dim);
   padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px;
@@ -1516,6 +1550,229 @@ input[type="range"]::-moz-range-track {
   .settings-grid > :first-child {
     grid-column: 1 / -1;
   }
+}
+
+/* =========== 送金手数料 (Network) ページ =========== */
+.net-main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 20px 100px;
+  display: grid;
+  gap: 18px;
+}
+.net-hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  display: grid;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.net-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 60% at 100% 0%, var(--accent-soft), transparent 60%);
+}
+.net-hero__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+}
+.net-hero__label {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.net-hero__chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: color-mix(in srgb, #d4a72c 18%, transparent);
+  color: #d4a72c;
+  letter-spacing: 0.03em;
+}
+.net-hero[data-level="low"] .net-hero__chip {
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+  color: var(--green);
+}
+.net-hero[data-level="high"] .net-hero__chip {
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+  color: var(--red);
+}
+.net-hero__metric {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  position: relative;
+}
+.net-hero__num {
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1;
+}
+.net-hero__unit {
+  font-size: 14px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.net-hero__sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  position: relative;
+}
+
+.net-tip {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 14px;
+  align-items: start;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 35%, transparent);
+  border-radius: 14px;
+}
+.net-tip__icon {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--green) 22%, transparent);
+  color: var(--green);
+  display: grid; place-items: center;
+  font-size: 22px;
+  font-weight: 700;
+}
+.net-tip__body { display: grid; gap: 4px; }
+.net-tip__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.02em;
+}
+.net-tip__desc {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+.net-tip__desc strong { color: var(--green); font-weight: 700; }
+.net-tip__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.net-tip__save {
+  font-weight: 700;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+.net-tip__sep { color: var(--text-faint); }
+.net-tip__hint { color: var(--text-dim); }
+
+.fee-list { display: grid; gap: 10px; }
+.fee-list__title {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0 0 2px;
+}
+.fee-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+.fee-card[data-recommended="true"] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.fee-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.fee-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.fee-card__label { font-size: 15px; font-weight: 700; color: var(--text); }
+.fee-card__chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: #ffffff;
+  letter-spacing: 0.04em;
+}
+.fee-card__eta {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.fee-card__amounts {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.fee-card__btc {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+.fee-card__unit {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  margin-left: 3px;
+}
+.fee-card__jpy {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.fee-card__rate { font-size: 12px; color: var(--text-faint); }
+.fee-card__desc { color: var(--text-dim); }
+
+.net-meta {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: grid;
+  gap: 8px;
+}
+.net-meta__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.net-meta__row span:last-child { color: var(--text); font-weight: 600; }
+.net-meta .btn { margin-top: 6px; }
+
+@media (max-width: 520px) {
+  .net-main { padding: 16px 14px 100px; }
+  .net-hero__num { font-size: 44px; }
 }
 
 /* =========== Amplify Authenticator ダークテーマ上書き =========== */
