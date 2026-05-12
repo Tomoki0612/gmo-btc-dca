@@ -914,7 +914,6 @@ function HistoryPage({ headingRef }) {
 }
 
 const MEMPOOL_FEES_URL = 'https://mempool.space/api/v1/fees/recommended';
-const MEMPOOL_PRICES_URL = 'https://mempool.space/api/v1/prices';
 const TX_VBYTES = 140;
 const NORMAL_BASELINE_SATVB = 20;
 
@@ -934,14 +933,14 @@ function NetworkPage({ headingRef }) {
     setLoading(true);
     setError('');
     try {
-      const [feesRes, priceRes] = await Promise.all([
+      const [feesRes, balanceRes] = await Promise.all([
         fetch(MEMPOOL_FEES_URL),
-        fetch(MEMPOOL_PRICES_URL),
+        fetch(BALANCE_URL),
       ]);
-      if (!feesRes.ok || !priceRes.ok) throw new Error('mempool.space からの取得に失敗しました');
+      if (!feesRes.ok) throw new Error('mempool.space からの手数料取得に失敗しました');
       const fees = await feesRes.json();
-      const price = await priceRes.json();
-      const btcJpy = Number(price?.JPY) || 0;
+      const balance = balanceRes.ok ? await balanceRes.json().catch(() => ({})) : {};
+      const btcJpy = Number(balance?.btcJpyRate) || 0;
       setData({ fees, btcJpy });
       setUpdated(new Date());
     } catch (e) {
@@ -1068,7 +1067,7 @@ function NetworkPage({ headingRef }) {
         </div>
         <div className="net-meta__row">
           <span>BTC価格の取得元</span>
-          <span>mempool.space</span>
+          <span>GMOコイン</span>
         </div>
         <div className="net-meta__row">
           <span>最終更新</span>

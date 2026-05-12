@@ -85,16 +85,22 @@ def _handle_balance():
     item = table.get_item(Key={"userId": USER_ID}).get("Item") or {}
     api_key = item.get("apiKey")
     api_secret = item.get("apiSecret")
+
+    # 公開ティッカーは認証不要なので API キー有無に関わらず取得を試みる
+    try:
+        rate = _fetch_btc_price()
+    except Exception:
+        rate = None
+
     if not api_key or not api_secret:
-        return _json_response(200, {"configured": False})
+        return _json_response(200, {"configured": False, "btcJpyRate": rate})
 
     try:
         assets = _fetch_assets(api_key, api_secret)
-        rate = _fetch_btc_price()
     except urllib.error.HTTPError as e:
-        return _json_response(502, {"configured": True, "message": f"GMOコインAPIエラー ({e.code})"})
+        return _json_response(502, {"configured": True, "btcJpyRate": rate, "message": f"GMOコインAPIエラー ({e.code})"})
     except Exception as e:
-        return _json_response(502, {"configured": True, "message": str(e)})
+        return _json_response(502, {"configured": True, "btcJpyRate": rate, "message": str(e)})
 
     jpy = 0.0
     btc = 0.0
