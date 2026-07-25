@@ -925,6 +925,19 @@ const MEMPOOL_FEES_URL = 'https://mempool.space/api/v1/fees/recommended';
 const TX_VBYTES = 140;
 const NORMAL_BASELINE_SATVB = 20;
 
+export function validateRecommendedFees(payload) {
+  const fields = ['fastestFee', 'halfHourFee', 'hourFee'];
+  const normalized = { ...payload };
+  for (const field of fields) {
+    const value = Number(payload?.[field]);
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error('mempool.space の手数料レスポンスが不正です');
+    }
+    normalized[field] = value;
+  }
+  return normalized;
+}
+
 function levelFromSatVb(satvb) {
   if (satvb < 10) return 'low';
   if (satvb > 30) return 'high';
@@ -946,7 +959,7 @@ function NetworkPage({ headingRef }) {
         authFetch(BALANCE_URL),
       ]);
       if (!feesRes.ok) throw new Error('mempool.space からの手数料取得に失敗しました');
-      const fees = await feesRes.json();
+      const fees = validateRecommendedFees(await feesRes.json());
       const balance = balanceRes.ok ? await balanceRes.json().catch(() => ({})) : {};
       const btcJpy = Number(balance?.btcJpyRate) || 0;
       setData({ fees, btcJpy });
@@ -989,6 +1002,7 @@ function NetworkPage({ headingRef }) {
   const levelLabel = level === 'low' ? '空いています' : level === 'high' ? '混雑しています' : '通常';
 
   const toBtc = (satvb) => (satvb * TX_VBYTES) / 1e8;
+  const toSats = (satvb) => Math.round(satvb * TX_VBYTES);
   const toJpy = (satvb) => Math.round(toBtc(satvb) * btcJpy);
   const savingJpy = level === 'low'
     ? Math.max(0, Math.round((NORMAL_BASELINE_SATVB - halfHour) * TX_VBYTES / 1e8 * btcJpy))
@@ -1049,14 +1063,16 @@ function NetworkPage({ headingRef }) {
             </div>
             <div className="fee-card__amounts">
               <div className="fee-card__btc mono">
-                {toBtc(t.satvb).toFixed(5)} <span className="fee-card__unit">BTC</span>
+                {toBtc(t.satvb).toFixed(8)} <span className="fee-card__unit">BTC</span>
               </div>
               {hasJpy && (
                 <div className="fee-card__jpy mono">≒ {toJpy(t.satvb).toLocaleString('ja-JP')}円</div>
               )}
             </div>
             <div className="fee-card__rate">
-              <span className="mono">{t.satvb}</span> sat/vB ・ <span className="fee-card__desc">{t.desc}</span>
+              <span className="mono">{t.satvb}</span> sat/vB × {TX_VBYTES} vB
+              {' = '}<span className="mono">{toSats(t.satvb).toLocaleString('ja-JP')}</span> sats
+              {' ・ '}<span className="fee-card__desc">{t.desc}</span>
             </div>
           </div>
         ))}

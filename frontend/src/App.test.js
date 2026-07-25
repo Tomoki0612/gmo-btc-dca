@@ -1,5 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
-import App, { authFetch } from './App';
+import App, { authFetch, validateRecommendedFees } from './App';
 
 jest.mock('aws-amplify/auth', () => ({
   fetchAuthSession: jest.fn(),
@@ -37,4 +37,24 @@ test('authFetch does not call the API without an ID token', async () => {
 
   await expect(authFetch('/settings')).rejects.toThrow('再ログイン');
   expect(global.fetch).not.toHaveBeenCalled();
+});
+
+test('validateRecommendedFees accepts the current one sat/vB response', () => {
+  expect(validateRecommendedFees({
+    fastestFee: 1,
+    halfHourFee: 1,
+    hourFee: 1,
+    economyFee: 1,
+  })).toMatchObject({
+    fastestFee: 1,
+    halfHourFee: 1,
+    hourFee: 1,
+  });
+});
+
+test('validateRecommendedFees rejects missing or zero fee fields', () => {
+  expect(() => validateRecommendedFees({
+    fastestFee: 1,
+    halfHourFee: 0,
+  })).toThrow('レスポンスが不正');
 });
