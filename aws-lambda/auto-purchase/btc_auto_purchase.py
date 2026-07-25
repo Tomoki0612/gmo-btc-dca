@@ -6,6 +6,7 @@ import uuid
 import requests
 import os
 import boto3
+from botocore.exceptions import ClientError
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 
@@ -15,10 +16,45 @@ JST = timezone(timedelta(hours=9))
 dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
 table = dynamodb.Table("btc-dca-settings")
 history_table = dynamodb.Table("btc-dca-history")
+ssm = boto3.client("ssm")
 SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
 DRY_RUN = os.environ.get('DRY_RUN')
+GMO_API_CREDENTIALS_PARAMETER = os.environ.get(
+    "GMO_API_CREDENTIALS_PARAMETER", "/gmo-btc-dca/prod/gmo-api-credentials"
+)
 
 USER_ID = "user1"
+
+
+def _get_secure_parameter(name):
+    try:
+        return ssm.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ParameterNotFound":
+            return None
+        raise
+
+
+def _get_api_credentials(settings):
+    """SSMを優先し、移行期間中のみDynamoDBの旧データへフォールバックする。"""
+    value = _get_secure_parameter(GMO_API_CREDENTIALS_PARAMETER)
+    if value:
+        try:
+            credentials = json.loads(value)
+            api_key = credentials["apiKey"]
+            api_secret = credentials["apiSecret"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            raise ValueError("SSMのGMO API認証情報の形式が正しくありません")
+        if not api_key or not api_secret:
+            raise ValueError("SSMのGMO API認証情報が不足しています")
+        return api_key, api_secret
+
+    legacy_key = settings.get("apiKey")
+    legacy_secret = settings.get("apiSecret")
+    if legacy_key and legacy_secret:
+        print("警告: DynamoDBの旧API認証情報を使用しています。設定画面から再保存してください")
+        return legacy_key, legacy_secret
+    return None, None
 
 
 def _put_purchase_history(status, amount_jpy, btc=None, rate=None, reason=None):
@@ -195,8 +231,7 @@ def lambda_handler(event, context):
             raise ValueError("設定が見つかりません")
 
         global API_KEY, API_SECRET, INVESTMENT_AMOUNT
-        API_KEY = settings.get("apiKey")
-        API_SECRET = settings.get("apiSecret")
+        API_KEY, API_SECRET = _get_api_credentials(settings)
         INVESTMENT_AMOUNT = int(settings.get("amount", 0))
 
         now = datetime.now(JST)

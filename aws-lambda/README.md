@@ -33,11 +33,15 @@ make deploy-guided
 ```
 
 以下のパラメータを聞かれます：
-- `GmoApiKey`: GMOコインAPIキー
-- `GmoApiSecret`: GMOコインAPIシークレット
-- `InvestmentAmount`: 積立金額（デフォルト: 3000）
-- `ScheduleExpression`: 実行スケジュール（デフォルト: 毎月28日 9時 JST）
+- `EnvironmentName`: 環境名（デフォルト: `prod`）
+- `ScheduleExpression`: EventBridgeの起動間隔（デフォルト: 毎時0分）
+- `DryRun`: GMOコインへ注文を送信しないテストモード
+- `EnableSnsNotification`: SNSメール通知を有効にするか
 - `NotificationEmail`: 通知先メールアドレス（空欄でスキップ可）
+
+GMO APIキー、APIシークレット、積立金額、実行日時はデプロイパラメータではありません。
+画面の設定APIから登録します。APIキーとシークレットはSSM Parameter StoreのStandard
+`SecureString`、それ以外の設定はDynamoDBへ保存されます。
 
 #### 2回目以降のデプロイ
 ```bash
@@ -57,8 +61,8 @@ make delete        # スタック削除（全リソース削除）
 #### ローカルテスト
 ```bash
 # env.jsonを作成
-cp env.json.example env.json
-# env.jsonを編集してAPIキーを設定
+cp auto-purchase/env.json.example auto-purchase/env.json
+# AWS認証情報と、テスト用DynamoDB/SSMパラメータを用意
 
 # ローカル実行
 make invoke

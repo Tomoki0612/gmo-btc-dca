@@ -11,6 +11,7 @@
 - 実行ユーザーに以下の IAM 権限があること:
   - `lambda:UpdateFunctionCode` / `UpdateFunctionConfiguration` / `GetFunction` / `AddPermission`
   - `apigateway:*`（対象 REST API のリソース作成・デプロイ）
+  - `iam:PutRolePolicy`（LambdaにParameter Store権限を設定）
   - `sts:GetCallerIdentity`
 - （疎通確認に使うなら）`jq` と `curl`
 
@@ -24,7 +25,9 @@
 
 ## 0. 前準備 — `btc-dca-history` テーブル
 
-履歴用 DynamoDB テーブルが必要。未作成なら下記で作成（auto-purchase 側の SAM でも同テーブルを作成するので、どちらか片方で十分）。
+履歴用 DynamoDB テーブルが必要。現在の本番テーブルは既存データを保持するため、
+auto-purchase側のSAMスタックには含めず、既存リソースとして参照する。
+未作成の環境では下記で作成する。
 
 ```bash
 aws dynamodb create-table \
@@ -49,22 +52,39 @@ Lambda 実行ロール（`settings-api` 関数）に以下の権限を追加す�
 
 ## 1. 実行
 
+CORSとJWT対応フロントを先に反映してから認証を必須化する。初回は次の順序で実行する。
+
 ```bash
+# 1. AuthorizationヘッダーをCORSで許可（APIはまだ認証必須にしない）
 cd aws-lambda/settings-api
-./deploy.sh
+API_AUTH_MODE=cors-only ./deploy.sh
+
+# 2. JWT対応フロントをCloudflare Pagesへデプロイ
+# mainへのpush、またはCloudflare側で再デプロイ
+
+# 3. Cognito認証を必須化
+API_AUTH_MODE=enforce ./deploy.sh
 ```
+
+すでにJWT対応フロントが公開済みなら、以降は通常どおり `./deploy.sh` だけでよい。
+`USER_POOL_ID` を省略した場合は `ap-northeast-1_4R5AGWXtg` を使用する。
 
 スクリプトがやること:
 
-1. `lambda_function.py` を zip にしてアップロード
-2. Lambda のタイムアウトを 15s に
-3. API Gateway ルートリソース ID を取得
-4. `/balance` リソースを作成（既存なら再利用）
-5. Lambda ARN とアカウント ID を取得
-6. `GET /balance` → Lambda プロキシ統合
-7. API Gateway → Lambda の呼び出し権限を付与
-8. `OPTIONS /balance` → CORS 用 MOCK 統合（Allow-Origin: `*`, Methods: `GET,OPTIONS`）
-9. `prod` ステージへデプロイ
+1. 既存Cognito User Poolを使うAPI Gateway Authorizerを作成・更新
+2. Lambda実行ロールにSSM Parameter Storeの読み書き権限を設定
+3. `lambda_function.py` をzipにしてアップロード
+4. `/settings` `/balance` `/history` のCORSを設定
+5. `enforce` モードではGET/POSTにCognito認証を設定
+6. `prod` ステージへデプロイ
+
+GMO APIキーとシークレットは、Standard TierのSecureString
+`/gmo-btc-dca/prod/gmo-api-credentials` にJSONとして保存される。
+設定APIのGETレスポンスには認証情報そのものを含めず、`apiConfigured` のみ返す。
+
+旧バージョンでDynamoDBの `apiKey` / `apiSecret` に保存された値は、次回の設定POST時に
+SecureStringへ自動移行され、DynamoDBから削除される。それまでは自動購入Lambdaが旧値へ
+フォールバックする。
 
 再実行しても既存リソースは壊しません（`put-method`/`add-permission` は衝突をスキップ）。
 
@@ -73,8 +93,12 @@ cd aws-lambda/settings-api
 ## 2. 疎通確認
 
 ```bash
-curl -s https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod/balance | jq .
+curl -s \
+  -H "Authorization: <Cognito ID token>" \
+  https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod/balance | jq .
 ```
+
+Authorizationヘッダーなしのリクエストが `401 Unauthorized` になることも確認する。
 
 期待レスポンス:
 
@@ -96,10 +120,12 @@ CORS プリフライト確認:
 curl -i -X OPTIONS \
   -H 'Origin: https://<your-project>.pages.dev' \
   -H 'Access-Control-Request-Method: GET' \
+  -H 'Access-Control-Request-Headers: Authorization' \
   https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod/balance
 ```
 
-`Access-Control-Allow-Origin: *` が返ればOK。
+`Access-Control-Allow-Origin: *` と `Access-Control-Allow-Headers: Content-Type,Authorization`
+が返ればOK。
 
 ---
 

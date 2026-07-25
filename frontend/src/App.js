@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Authenticator, ThemeProvider, createTheme } from '@aws-amplify/ui-react';
-import { updatePassword, signOut } from 'aws-amplify/auth';
+import { fetchAuthSession, updatePassword, signOut } from 'aws-amplify/auth';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 import { I18n } from 'aws-amplify/utils';
@@ -48,6 +48,21 @@ const API_BASE = 'https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/pr
 const API_URL = `${API_BASE}/settings`;
 const BALANCE_URL = `${API_BASE}/balance`;
 const HISTORY_URL = `${API_BASE}/history`;
+
+export async function authFetch(url, options = {}) {
+  const session = await fetchAuthSession();
+  const idToken = session.tokens?.idToken?.toString();
+  if (!idToken) {
+    throw new Error('認証セッションを取得できません。再ログインしてください');
+  }
+
+  const headers = new Headers(options.headers || {});
+  headers.set('Authorization', idToken);
+  if (options.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  return fetch(url, { ...options, headers });
+}
 
 const FREQ_LABEL = { daily: '毎日', weekly: '毎週', monthly: '毎月' };
 const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
@@ -366,12 +381,6 @@ function TopBar({ title, onBack, onMenu, center }) {
   );
 }
 
-function maskApiKey(key) {
-  if (!key) return '';
-  const head = key.slice(0, 4);
-  return `${head}••••••••••••`;
-}
-
 function BalanceCard({ apiConfigured }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -383,7 +392,7 @@ function BalanceCard({ apiConfigured }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(BALANCE_URL);
+      const res = await authFetch(BALANCE_URL);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || '残高取得に失敗しました');
       if (body.configured === false) {
@@ -567,11 +576,10 @@ function SettingsPage({ savedSettings, onNavigate, headingRef }) {
         frequency,
         scheduleDay: frequency === 'daily' ? null : Number(scheduleDay),
         scheduleTime: Number(scheduleTime),
-        apiKey: savedSettings?.apiKey || '',
-        apiSecret: savedSettings?.apiSecret || '',
       };
-      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
-      if (!res.ok) throw new Error('API通信エラー');
+      const res = await authFetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.message || 'API通信エラー');
       onNavigate('settings', { ...savedSettings, ...body });
       setToast(`${changes.length}件の変更を保存しました`);
       setTimeout(() => setToast(null), 2600);
@@ -582,7 +590,7 @@ function SettingsPage({ savedSettings, onNavigate, headingRef }) {
     }
   };
 
-  const apiConfigured = !!(savedSettings?.apiKey && savedSettings?.apiSecret);
+  const apiConfigured = !!savedSettings?.apiConfigured;
 
   return (
     <>
@@ -629,11 +637,11 @@ function SettingsPage({ savedSettings, onNavigate, headingRef }) {
         >
           <div className="kv-row">
             <span>APIキー</span>
-            <span className="kv-row__val">{savedSettings?.apiKey ? maskApiKey(savedSettings.apiKey) : '未設定'}</span>
+            <span className="kv-row__val">{apiConfigured ? 'SecureStringに保存済み' : '未設定'}</span>
           </div>
           <div className="kv-row">
             <span>APIシークレット</span>
-            <span className="kv-row__val">{savedSettings?.apiSecret ? '設定済み' : '未設定'}</span>
+            <span className="kv-row__val">{apiConfigured ? 'SecureStringに保存済み' : '未設定'}</span>
           </div>
         </FieldCard>
       </main>
@@ -809,7 +817,7 @@ function HistoryPage({ headingRef }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(HISTORY_URL);
+        const res = await authFetch(HISTORY_URL);
         if (!res.ok) throw new Error('履歴取得エラー');
         const body = await res.json();
         if (!cancelled) setItems(Array.isArray(body.items) ? body.items : []);
@@ -935,7 +943,7 @@ function NetworkPage({ headingRef }) {
     try {
       const [feesRes, balanceRes] = await Promise.all([
         fetch(MEMPOOL_FEES_URL),
-        fetch(BALANCE_URL),
+        authFetch(BALANCE_URL),
       ]);
       if (!feesRes.ok) throw new Error('mempool.space からの手数料取得に失敗しました');
       const fees = await feesRes.json();
@@ -1215,8 +1223,8 @@ function MenuPage({ onNavigate, onSignOut, headingRef }) {
 }
 
 function ApiPage({ savedSettings, onNavigate, onSaved, headingRef }) {
-  const [key, setKey] = useState(savedSettings?.apiKey || '');
-  const [secret, setSecret] = useState(savedSettings?.apiSecret || '');
+  const [key, setKey] = useState('');
+  const [secret, setSecret] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1229,11 +1237,12 @@ function ApiPage({ savedSettings, onNavigate, onSaved, headingRef }) {
     setBusy(true);
     setError('');
     try {
-      const body = { ...savedSettings, apiKey: key, apiSecret: secret };
-      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
-      if (!res.ok) throw new Error('API通信エラー');
+      const body = { apiKey: key, apiSecret: secret };
+      const res = await authFetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.message || 'API通信エラー');
       setSaved(true);
-      onSaved(body);
+      onSaved({ ...savedSettings, apiConfigured: true });
       setTimeout(() => onNavigate('home'), 800);
     } catch (e) {
       setError(e.message || '保存に失敗しました');
@@ -1249,7 +1258,11 @@ function ApiPage({ savedSettings, onNavigate, onSaved, headingRef }) {
       <main className="form-page">
         <div className="callout">
           <div className="callout__title">GMOコイン 取引API</div>
-          <div className="callout__body">取引権限を有効にしたAPIキーを発行して入力してください。暗号化して保存されます。</div>
+          <div className="callout__body">
+            {savedSettings?.apiConfigured
+              ? '認証情報は暗号化して保存されています。変更する場合だけ、新しい値を両方入力してください。'
+              : '取引権限を有効にしたAPIキーを発行して入力してください。暗号化して保存されます。'}
+          </div>
         </div>
 
         <label className="input-block">
@@ -1414,7 +1427,7 @@ function MainApp({ signOut }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(API_URL);
+        const res = await authFetch(API_URL);
         if (!res.ok) return;
         const data = await res.json();
         setSavedSettings({
@@ -1422,8 +1435,7 @@ function MainApp({ signOut }) {
           frequency: data.frequency || 'monthly',
           scheduleDay: data.scheduleDay ?? 1,
           scheduleTime: data.scheduleTime ?? 0,
-          apiKey: data.apiKey || '',
-          apiSecret: data.apiSecret || '',
+          apiConfigured: !!data.apiConfigured,
         });
       } catch {
         /* noop */

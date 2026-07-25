@@ -26,6 +26,11 @@
       "react-app/jest"
     ]
   },
+  "jest": {
+    "moduleNameMapper": {
+      "^@aws-amplify/ui-react/styles\\.css$": "<rootDir>/node_modules/@aws-amplify/ui-react/dist/styles.css"
+    }
+  },
   "browserslist": {
     "production": [
       ">0.2%",

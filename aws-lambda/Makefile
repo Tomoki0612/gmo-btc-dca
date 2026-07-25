@@ -13,13 +13,12 @@ deploy: build
 	sam deploy
 
 # パラメータを指定してデプロイ
-# 使用例: make deploy-with-params API_KEY=xxx API_SECRET=xxx EMAIL=your@email.com AMOUNT=5000
+# 使用例: make deploy-with-params EMAIL=your@email.com ENV=prod DRY_RUN=true
 deploy-with-params: build
 	sam deploy \
 		--parameter-overrides \
-		"GmoApiKey=$(API_KEY)" \
-		"GmoApiSecret=$(API_SECRET)" \
-		"InvestmentAmount=$(AMOUNT)" \
+		"EnvironmentName=$(or $(ENV),prod)" \
+		"DryRun=$(or $(DRY_RUN),false)" \
 		"NotificationEmail=$(EMAIL)"
 
 # ローカルでLambda関数を実行（env.jsonが必要）
@@ -48,7 +47,7 @@ help:
 	@echo "  make build          - SAMビルド"
 	@echo "  make deploy-guided  - 初回デプロイ（対話形式）"
 	@echo "  make deploy         - 通常デプロイ"
-	@echo "  make deploy-with-params API_KEY=xxx API_SECRET=xxx EMAIL=xxx AMOUNT=xxx"
+	@echo "  make deploy-with-params EMAIL=xxx ENV=prod DRY_RUN=false"
 	@echo "                      - パラメータ指定デプロイ"
 	@echo "  make invoke         - ローカル実行"
 	@echo "  make logs           - ログ表示"

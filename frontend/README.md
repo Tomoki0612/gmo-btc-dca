@@ -21,8 +21,16 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 1. Cloudflare ダッシュボード → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**
 2. このリポジトリを選択し、上記のビルド設定を入力
 3. デプロイ完了後、`https://<project>.pages.dev` でアクセス可能
-4. Cognito 認証 / API Gateway は CORS が `*` で許可されているため追加設定は不要
+4. API Gateway側でCognito Authorizerと、`Authorization` ヘッダーを許可するCORS設定を反映
 5. AWS Amplify Hosting 側はアプリ削除、もしくはブランチの Auto build OFF で停止
+
+### API認証
+
+ログイン後、`fetchAuthSession()` で取得したCognito IDトークンを、バックエンドAPIの
+`Authorization` ヘッダーへ設定する。外部API（mempool.space）にはトークンを送信しない。
+
+初回の認証有効化は、APIのCORS更新 → フロント公開 → APIのCognito認証必須化の順で行う。
+詳しくは `aws-lambda/settings-api/DEPLOY.md` を参照。
 
 ## Available Scripts
 

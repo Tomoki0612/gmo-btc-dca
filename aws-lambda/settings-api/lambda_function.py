@@ -3,6 +3,7 @@ import hmac
 import hashlib
 import time
 import uuid
+import os
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, timedelta
@@ -10,15 +11,21 @@ from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table("btc-dca-settings")
 history_table = dynamodb.Table("btc-dca-history")
+ssm = boto3.client("ssm")
+
+GMO_API_CREDENTIALS_PARAMETER = os.environ.get(
+    "GMO_API_CREDENTIALS_PARAMETER", "/gmo-btc-dca/prod/gmo-api-credentials"
+)
 
 HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
 }
 
 GMO_PRIVATE = "https://api.coin.z.com/private"
@@ -30,6 +37,56 @@ USER_ID = "user1"
 
 FREQ_LABEL = {"daily": "毎日", "weekly": "毎週", "monthly": "毎月"}
 WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"]
+
+
+def _get_secure_parameter(name):
+    try:
+        return ssm.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ParameterNotFound":
+            return None
+        raise
+
+
+def _load_api_credentials(item):
+    """SSMを優先し、未移行の場合だけDynamoDBの旧フィールドを読む。"""
+    value = _get_secure_parameter(GMO_API_CREDENTIALS_PARAMETER)
+    if value:
+        try:
+            credentials = json.loads(value)
+            api_key = credentials["apiKey"]
+            api_secret = credentials["apiSecret"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            raise RuntimeError("SSMのGMO API認証情報の形式が正しくありません")
+        if not api_key or not api_secret:
+            raise RuntimeError("SSMのGMO API認証情報が不足しています")
+        return api_key, api_secret, "ssm"
+
+    legacy_key = item.get("apiKey")
+    legacy_secret = item.get("apiSecret")
+    if legacy_key and legacy_secret:
+        return legacy_key, legacy_secret, "dynamodb"
+    return None, None, None
+
+
+def _put_api_credentials(api_key, api_secret):
+    ssm.put_parameter(
+        Name=GMO_API_CREDENTIALS_PARAMETER,
+        Value=json.dumps({"apiKey": api_key, "apiSecret": api_secret}),
+        Type="SecureString",
+        Tier="Standard",
+        Overwrite=True,
+    )
+
+
+def _public_settings(item, api_configured):
+    public = {
+        key: value
+        for key, value in item.items()
+        if key not in {"apiKey", "apiSecret"}
+    }
+    public["apiConfigured"] = api_configured
+    return public
 
 
 def decimal_to_num(obj):
@@ -83,8 +140,10 @@ def _fetch_btc_price():
 
 def _handle_balance():
     item = table.get_item(Key={"userId": USER_ID}).get("Item") or {}
-    api_key = item.get("apiKey")
-    api_secret = item.get("apiSecret")
+    try:
+        api_key, api_secret, _ = _load_api_credentials(item)
+    except Exception as e:
+        return _json_response(502, {"configured": False, "message": f"認証情報の取得エラー: {e}"})
 
     # 公開ティッカーは認証不要なので API キー有無に関わらず取得を試みる
     try:
@@ -180,7 +239,7 @@ def _put_history_change(field, before, after):
         print(f"history put failed ({field}): {e}")
 
 
-def _diff_and_record(old, new):
+def _diff_and_record(old, new, old_api_configured=False, new_api_configured=False):
     """設定変更を項目単位で履歴に記録する。"""
     if int(old.get("amount") or 0) != int(new.get("amount") or 0):
         _put_history_change("amount", _fmt_yen(old.get("amount")), _fmt_yen(new.get("amount")))
@@ -205,10 +264,12 @@ def _diff_and_record(old, new):
             _fmt_time(new.get("scheduleTime")),
         )
 
-    old_api = bool(old.get("apiKey") and old.get("apiSecret"))
-    new_api = bool(new.get("apiKey") and new.get("apiSecret"))
-    if old_api != new_api:
-        _put_history_change("api", "未設定" if not old_api else "設定済み", "設定済み" if new_api else "未設定")
+    if old_api_configured != new_api_configured:
+        _put_history_change(
+            "api",
+            "設定済み" if old_api_configured else "未設定",
+            "設定済み" if new_api_configured else "未設定",
+        )
 
 
 def _handle_history():
@@ -268,21 +329,75 @@ def lambda_handler(event, context):
     if method == "GET":
         response = table.get_item(Key={"userId": USER_ID})
         item = response.get("Item", {})
-        return _json_response(200, item)
+        try:
+            api_key, api_secret, _ = _load_api_credentials(item)
+        except Exception as e:
+            return _json_response(502, {"message": f"認証情報の取得エラー: {e}"})
+        return _json_response(200, _public_settings(item, bool(api_key and api_secret)))
 
     if method == "POST":
-        body = json.loads(event["body"])
-        existing = table.get_item(Key={"userId": USER_ID}).get("Item") or {}
-        item = {"userId": USER_ID}
-        for key in ["amount", "frequency", "scheduleDay", "scheduleTime", "apiKey", "apiSecret"]:
-            val = body.get(key)
-            if val is not None and val != "":
-                item[key] = val
-        table.put_item(Item=item)
         try:
-            _diff_and_record(existing, item)
+            body = json.loads(event.get("body") or "{}")
+        except json.JSONDecodeError:
+            return _json_response(400, {"message": "JSON形式が正しくありません"})
+
+        existing = table.get_item(Key={"userId": USER_ID}).get("Item") or {}
+        try:
+            old_key, old_secret, credential_source = _load_api_credentials(existing)
+        except Exception as e:
+            return _json_response(502, {"message": f"認証情報の取得エラー: {e}"})
+
+        new_key = str(body.get("apiKey") or "").strip()
+        new_secret = str(body.get("apiSecret") or "").strip()
+        if bool(new_key) != bool(new_secret):
+            return _json_response(400, {"message": "APIキーとAPIシークレットを両方入力してください"})
+
+        try:
+            if new_key and new_secret:
+                _put_api_credentials(new_key, new_secret)
+                final_key, final_secret = new_key, new_secret
+            elif credential_source == "dynamodb":
+                # 旧DynamoDB値を初回の設定保存時にSecureStringへ移行する。
+                _put_api_credentials(old_key, old_secret)
+                final_key, final_secret = old_key, old_secret
+            else:
+                final_key, final_secret = old_key, old_secret
+        except Exception as e:
+            return _json_response(502, {"message": f"認証情報の保存エラー: {e}"})
+
+        item = {
+            key: value
+            for key, value in existing.items()
+            if key not in {"apiKey", "apiSecret"}
+        }
+        item["userId"] = USER_ID
+        for key in ["amount", "frequency", "scheduleDay", "scheduleTime"]:
+            if key not in body:
+                continue
+            val = body.get(key)
+            if val is None or val == "":
+                item.pop(key, None)
+            else:
+                item[key] = val
+
+        try:
+            table.put_item(Item=item)
+        except Exception as e:
+            return _json_response(502, {"message": f"設定の保存エラー: {e}"})
+
+        new_api_configured = bool(final_key and final_secret)
+        try:
+            _diff_and_record(
+                existing,
+                item,
+                old_api_configured=bool(old_key and old_secret),
+                new_api_configured=new_api_configured,
+            )
         except Exception as e:  # noqa: BLE001
             print(f"diff record failed: {e}")
-        return _json_response(200, {"message": "saved"})
+        return _json_response(200, {
+            "message": "saved",
+            "apiConfigured": new_api_configured,
+        })
 
     return _json_response(405, {"message": "Method Not Allowed"})

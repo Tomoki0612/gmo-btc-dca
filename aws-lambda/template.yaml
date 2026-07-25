@@ -3,6 +3,12 @@ Transform: AWS::Serverless-2016-10-31
 Description: BTC自動積立Lambda関数 - GMOコインAPIを使用した定期購入
 
 Parameters:
+  EnvironmentName:
+    Type: String
+    Default: "prod"
+    AllowedPattern: "^[a-zA-Z0-9_-]+$"
+    Description: SSM Parameter Storeで使用する環境名
+
   ScheduleExpression:
     Type: String
     Default: "cron(0 * * * ? *)"
@@ -52,6 +58,7 @@ Resources:
             - !Ref BtcPurchaseNotificationTopic
             - ""
           DRY_RUN: !Ref DryRun
+          GMO_API_CREDENTIALS_PARAMETER: !Sub "/gmo-btc-dca/${EnvironmentName}/gmo-api-credentials"
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -70,6 +77,10 @@ Resources:
               Action:
                 - dynamodb:PutItem
               Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/btc-dca-history"
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gmo-btc-dca/${EnvironmentName}/gmo-api-credentials"
       Events:
         ScheduledPurchase:
           Type: Schedule
@@ -78,22 +89,6 @@ Resources:
             Description: BTC定期購入スケジュール
             Schedule: !Ref ScheduleExpression
             Enabled: true
-
-  BtcDcaHistoryTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: btc-dca-history
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: userId
-          AttributeType: S
-        - AttributeName: sk
-          AttributeType: S
-      KeySchema:
-        - AttributeName: userId
-          KeyType: HASH
-        - AttributeName: sk
-          KeyType: RANGE
 
   BtcPurchaseNotificationTopic:
     Type: AWS::SNS::Topic
