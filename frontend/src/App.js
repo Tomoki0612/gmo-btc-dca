@@ -921,12 +921,12 @@ function HistoryPage({ headingRef }) {
   );
 }
 
-const MEMPOOL_FEES_URL = 'https://mempool.space/api/v1/fees/recommended';
+const MEMPOOL_FEES_URL = 'https://mempool.space/api/v1/fees/precise';
 const TX_VBYTES = 140;
 const NORMAL_BASELINE_SATVB = 20;
 
 export function validateRecommendedFees(payload) {
-  const fields = ['fastestFee', 'halfHourFee', 'hourFee'];
+  const fields = ['fastestFee', 'halfHourFee', 'hourFee', 'economyFee'];
   const normalized = { ...payload };
   for (const field of fields) {
     const value = Number(payload?.[field]);
@@ -940,9 +940,10 @@ export function validateRecommendedFees(payload) {
 
 export function buildFeeTiers(fees) {
   const tiers = [
-    { k: 'fast', label: '高速', desc: '次のブロックを狙う', eta: '〜10分', satvb: fees.fastestFee },
-    { k: 'normal', label: '標準', desc: '数ブロック以内', eta: '〜30分', satvb: fees.halfHourFee, recommended: true },
-    { k: 'slow', label: '低速', desc: '急がない時に', eta: '〜1時間', satvb: fees.hourFee },
+    { k: 'fast', label: '高優先', desc: '次のブロックを狙う', eta: '〜10分', satvb: fees.fastestFee },
+    { k: 'normal', label: '中優先', desc: '数ブロック以内', eta: '〜30分', satvb: fees.halfHourFee, recommended: true },
+    { k: 'slow', label: '低優先', desc: '急がない時に', eta: '〜1時間', satvb: fees.hourFee },
+    { k: 'economy', label: '優先なし', desc: '長時間待てる時に', eta: '時間に余裕', satvb: fees.economyFee },
   ];
   const allSame = tiers.every((tier) => tier.satvb === tiers[0].satvb);
   if (!allSame) return { allSame, tiers };
@@ -1023,8 +1024,8 @@ function NetworkPage({ headingRef }) {
   const level = levelFromSatVb(halfHour);
   const levelLabel = level === 'low' ? '空いています' : level === 'high' ? '混雑しています' : '通常';
 
-  const toBtc = (satvb) => (satvb * TX_VBYTES) / 1e8;
-  const toSats = (satvb) => Math.round(satvb * TX_VBYTES);
+  const toSats = (satvb) => Math.ceil(satvb * TX_VBYTES);
+  const toBtc = (satvb) => toSats(satvb) / 1e8;
   const toJpy = (satvb) => Math.round(toBtc(satvb) * btcJpy);
   const savingJpy = level === 'low'
     ? Math.max(0, Math.round((NORMAL_BASELINE_SATVB - halfHour) * TX_VBYTES / 1e8 * btcJpy))
@@ -1091,7 +1092,7 @@ function NetworkPage({ headingRef }) {
               )}
             </div>
             <div className="fee-card__rate">
-              <span className="mono">{t.satvb}</span> sat/vB × {TX_VBYTES} vB
+              <span className="mono">{t.satvb.toLocaleString('ja-JP', { maximumFractionDigits: 3 })}</span> sat/vB × {TX_VBYTES} vB
               {' = '}<span className="mono">{toSats(t.satvb).toLocaleString('ja-JP')}</span> sats
               {' ・ '}<span className="fee-card__desc">{t.desc}</span>
             </div>

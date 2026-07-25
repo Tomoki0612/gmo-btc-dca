@@ -39,16 +39,17 @@ test('authFetch does not call the API without an ID token', async () => {
   expect(global.fetch).not.toHaveBeenCalled();
 });
 
-test('validateRecommendedFees accepts the current one sat/vB response', () => {
+test('validateRecommendedFees accepts sub-sat precise fee rates', () => {
   expect(validateRecommendedFees({
-    fastestFee: 1,
-    halfHourFee: 1,
-    hourFee: 1,
-    economyFee: 1,
+    fastestFee: 1.054,
+    halfHourFee: 0.763,
+    hourFee: 0.447,
+    economyFee: 0.2,
   })).toMatchObject({
-    fastestFee: 1,
-    halfHourFee: 1,
-    hourFee: 1,
+    fastestFee: 1.054,
+    halfHourFee: 0.763,
+    hourFee: 0.447,
+    economyFee: 0.2,
   });
 });
 
@@ -64,6 +65,7 @@ test('buildFeeTiers collapses identical recommendations into one card', () => {
     fastestFee: 1,
     halfHourFee: 1,
     hourFee: 1,
+    economyFee: 1,
   })).toMatchObject({
     allSame: true,
     tiers: [{
@@ -74,13 +76,14 @@ test('buildFeeTiers collapses identical recommendations into one card', () => {
   });
 });
 
-test('buildFeeTiers keeps three cards when recommendations differ', () => {
+test('buildFeeTiers keeps four cards when recommendations differ', () => {
   const result = buildFeeTiers({
-    fastestFee: 8,
-    halfHourFee: 4,
-    hourFee: 2,
+    fastestFee: 1,
+    halfHourFee: 0.7,
+    hourFee: 0.4,
+    economyFee: 0.2,
   });
 
   expect(result.allSame).toBe(false);
-  expect(result.tiers.map((tier) => tier.satvb)).toEqual([8, 4, 2]);
+  expect(result.tiers.map((tier) => tier.satvb)).toEqual([1, 0.7, 0.4, 0.2]);
 });
