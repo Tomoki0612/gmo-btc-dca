@@ -277,6 +277,7 @@ Resources:
             - ''
           DRY_RUN: !Ref DryRun
           GMO_API_CREDENTIALS_PARAMETER: !Sub /gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
+          DISCORD_WEBHOOK_PARAMETER: !Sub /gmo-btc-dca/${EnvironmentName}/discord-webhook-url
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -298,7 +299,9 @@ Resources:
             - Effect: Allow
               Action:
                 - ssm:GetParameter
-              Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
+              Resource:
+                - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
+                - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gmo-btc-dca/${EnvironmentName}/discord-webhook-url
       Events:
         ScheduledPurchase:
           Type: Schedule

@@ -3,7 +3,7 @@ import json
 import os
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from botocore.exceptions import ClientError
 
@@ -107,8 +107,13 @@ class AutoPurchaseCredentialsTest(unittest.TestCase):
             ROOT / "auto-purchase" / "btc_auto_purchase.py",
         )
 
-    def test_ssm_credentials_take_precedence_over_legacy_values(self):
+    def setUp(self):
         self.module.ssm = Mock()
+        self.module.sns = Mock()
+        self.module.table = Mock()
+        self.module.SNS_TOPIC_ARN = "arn:aws:sns:ap-northeast-1:123456789012:test"
+
+    def test_ssm_credentials_take_precedence_over_legacy_values(self):
         self.module.ssm.get_parameter.return_value = {
             "Parameter": {
                 "Value": json.dumps(
@@ -122,6 +127,60 @@ class AutoPurchaseCredentialsTest(unittest.TestCase):
         )
 
         self.assertEqual(credentials, ("ssm-key", "ssm-secret"))
+
+    def test_notification_prefers_discord_without_sending_email(self):
+        self.module.ssm.get_parameter.return_value = {
+            "Parameter": {
+                "Value": "https://discord.com/api/webhooks/123/token"
+            }
+        }
+        discord_response = Mock()
+
+        with patch.object(
+            self.module.requests,
+            "post",
+            return_value=discord_response,
+        ) as post:
+            self.module.send_notification("BTC積立成功", "購入しました")
+
+        post.assert_called_once_with(
+            "https://discord.com/api/webhooks/123/token",
+            json={
+                "content": "**BTC積立成功**\n\n購入しました",
+                "allowed_mentions": {"parse": []},
+            },
+            timeout=10,
+        )
+        discord_response.raise_for_status.assert_called_once_with()
+        self.module.sns.publish.assert_not_called()
+
+    def test_notification_falls_back_to_email_when_discord_is_missing(self):
+        self.module.ssm.get_parameter.side_effect = parameter_not_found()
+        self.module.sns.publish.return_value = {"MessageId": "message-1"}
+
+        with patch.object(self.module.requests, "post") as post:
+            self.module.send_notification("BTC積立エラー", "失敗しました")
+
+        post.assert_not_called()
+        self.module.sns.publish.assert_called_once_with(
+            TopicArn=self.module.SNS_TOPIC_ARN,
+            Subject="BTC積立エラー",
+            Message="失敗しました",
+        )
+
+    def test_notification_can_be_tested_without_running_a_purchase(self):
+        with patch.object(self.module, "send_notification") as notify:
+            response = self.module.lambda_handler(
+                {"action": "test-notification"},
+                None,
+            )
+
+        self.assertEqual(response["statusCode"], 200)
+        notify.assert_called_once_with(
+            subject="BTC積立 通知テスト",
+            message="Discord通知の設定が完了しました。",
+        )
+        self.module.table.get_item.assert_not_called()
 
 
 if __name__ == "__main__":

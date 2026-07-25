@@ -18,6 +18,20 @@ GMO APIキーとシークレットは、CloudFormationテンプレートへ値�
 SSM Parameter Store StandardのSecureString
 `/gmo-btc-dca/prod/gmo-api-credentials` に保存し、SAMから名前だけを参照します。
 
+Discord Webhook URLも同様に、Standard SecureString
+`/gmo-btc-dca/prod/discord-webhook-url`へ保存します。購入成功・失敗はDiscordへ通知し、
+Discordが未設定または送信失敗の場合だけSNSメールへフォールバックします。
+
+Webhook URLは画面やGitへ貼らず、ローカル端末で次のコマンドを実行して登録します。
+
+```bash
+make configure-discord
+make test-discord
+```
+
+`make configure-discord`はURLを非表示で入力し、SecureStringへ保存します。
+`make test-discord`は購入処理を実行せず、通知だけを送信します。
+
 既存のDynamoDB、Cognito、設定Lambda、IAMロールは2026-07-25に同じスタックへ
 CloudFormation Import済みです。テーブルとCognitoには`Retain`を設定しているため、
 スタック操作で既存履歴やログインユーザーを削除しません。

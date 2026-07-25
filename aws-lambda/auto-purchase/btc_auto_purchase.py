@@ -9,6 +9,7 @@ import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
+from urllib.parse import urlparse
 
 JST = timezone(timedelta(hours=9))
 
@@ -21,6 +22,9 @@ SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
 DRY_RUN = os.environ.get('DRY_RUN')
 GMO_API_CREDENTIALS_PARAMETER = os.environ.get(
     "GMO_API_CREDENTIALS_PARAMETER", "/gmo-btc-dca/prod/gmo-api-credentials"
+)
+DISCORD_WEBHOOK_PARAMETER = os.environ.get(
+    "DISCORD_WEBHOOK_PARAMETER", "/gmo-btc-dca/prod/discord-webhook-url"
 )
 
 USER_ID = "user1"
@@ -93,20 +97,47 @@ print(f"シークレットキー: {API_SECRET[:5]}...{API_SECRET[-5:]}")
 '''
 
 def send_notification(subject, message):
-    """SNSでメール通知を送信"""
+    """Discordへ通知し、送信できない場合だけSNSメールへフォールバックする。"""
+    try:
+        webhook_url = _get_secure_parameter(DISCORD_WEBHOOK_PARAMETER)
+        if webhook_url:
+            parsed = urlparse(webhook_url)
+            if (
+                parsed.scheme != "https"
+                or parsed.hostname not in {"discord.com", "discordapp.com"}
+                or not parsed.path.startswith("/api/webhooks/")
+            ):
+                raise ValueError("Discord Webhook URLの形式が正しくありません")
+
+            content = f"**{subject}**\n\n{message}"
+            response = requests.post(
+                webhook_url,
+                json={
+                    "content": content[:2000],
+                    "allowed_mentions": {"parse": []},
+                },
+                timeout=10,
+            )
+            response.raise_for_status()
+            print("Discord通知送信成功")
+            return
+        print("Discord Webhookが未設定のため、メール通知へフォールバックします")
+    except Exception as e:
+        print(f"Discord通知送信エラー: {str(e)}")
+
     if not SNS_TOPIC_ARN:
-        print("SNS_TOPIC_ARNが設定されていないため、通知をスキップします")
+        print("SNS_TOPIC_ARNが設定されていないため、フォールバック通知をスキップします")
         return
-    
+
     try:
         response = sns.publish(
             TopicArn=SNS_TOPIC_ARN,
             Subject=subject,
             Message=message
         )
-        print(f"通知送信成功: MessageId={response['MessageId']}")
+        print(f"メール通知送信成功: MessageId={response['MessageId']}")
     except Exception as e:
-        print(f"通知送信エラー: {str(e)}")
+        print(f"メール通知送信エラー: {str(e)}")
 
 def get_account_balance():
     """口座残高（買付余力）を取得する関数"""
@@ -223,6 +254,13 @@ def place_order(amount_jpy):
 
 def lambda_handler(event, context):
     """Lambda関数のメインハンドラー"""
+    if event.get("action") == "test-notification":
+        send_notification(
+            subject="BTC積立 通知テスト",
+            message="Discord通知の設定が完了しました。",
+        )
+        return {"statusCode": 200, "body": "通知テスト完了"}
+
     try:
         # DynamoDBから設定を取得
         response = table.get_item(Key={"userId": "user1"})
