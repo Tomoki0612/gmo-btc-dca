@@ -1,64 +1,282 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: BTC自動積立Lambda関数 - GMOコインAPIを使用した定期購入
+Description: GMO BTC DCA application - functions, data, authentication, schedule, and notifications
 
 Parameters:
   EnvironmentName:
     Type: String
-    Default: "prod"
-    AllowedPattern: "^[a-zA-Z0-9_-]+$"
-    Description: SSM Parameter Storeで使用する環境名
+    Default: prod
+    AllowedPattern: '^[a-zA-Z0-9_-]+$'
+    Description: Environment name used in the SSM Parameter Store path
 
   ScheduleExpression:
     Type: String
-    Default: "cron(0 * * * ? *)"
-    Description: 実行スケジュール（毎時0分に起動、実行判定はLambda側で実施）
+    Default: cron(0 * * * ? *)
+    Description: Invoke hourly; the function decides whether the configured purchase is due
 
   EnableSnsNotification:
     Type: String
-    Default: "true"
+    Default: 'true'
     AllowedValues:
-      - "true"
-      - "false"
-    Description: SNS通知を有効にするか
+      - 'true'
+      - 'false'
+    Description: Whether to send purchase notifications through SNS
 
   NotificationEmail:
     Type: String
-    Default: ""
-    Description: 通知先メールアドレス（空の場合はSNS通知なし）
+    Default: ''
+    Description: Notification email address; blank disables SNS resources
 
   DryRun:
     Type: String
-    Default: "false"
-    Description: テスト実行フラグ
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Prevent real GMO Coin orders when true
 
 Conditions:
   CreateSnsResources: !And
-    - !Equals [!Ref EnableSnsNotification, "true"]
-    - !Not [!Equals [!Ref NotificationEmail, ""]]
-
-Globals:
-  Function:
-    Timeout: 30
-    MemorySize: 256
-    Runtime: python3.11
+    - !Equals [!Ref EnableSnsNotification, 'true']
+    - !Not [!Equals [!Ref NotificationEmail, '']]
 
 Resources:
+  BtcDcaSettingsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: btc-dca-settings
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+
+  BtcDcaHistoryTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: btc-dca-history
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: User pool - 8tk0c9
+      UserPoolTier: ESSENTIALS
+      DeletionProtection: ACTIVE
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      MfaConfiguration: 'OFF'
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+          - Name: verified_phone_number
+            Priority: 2
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: btc-dca-settings-spa
+      GenerateSecret: false
+      RefreshTokenValidity: 5
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_AUTH
+        - ALLOW_USER_SRP_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - https://d84l1y8p4kdic.cloudfront.net
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - phone
+      AllowedOAuthFlowsUserPoolClient: true
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AuthSessionValidity: 3
+
+  SettingsApiRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: btc-dca-settings-lambda-role
+      Description: Allows the settings API Lambda function to access application data
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: btc-dca-dynamodb-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt BtcDcaSettingsTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:PutItem
+                Resource: !GetAtt BtcDcaHistoryTable.Arn
+        - PolicyName: btc-dca-ssm-credentials
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
+
+  BtcDcaApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: btc-dca-api
+      StageName: prod
+      EndpointConfiguration:
+        Type: REGIONAL
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowMethods: "'GET,POST,OPTIONS'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt CognitoUserPool.Arn
+            Identity:
+              Header: Authorization
+      GatewayResponses:
+        UNAUTHORIZED:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        ACCESS_DENIED:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+
+  SettingsApiFunction:
+    Type: AWS::Serverless::Function
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      FunctionName: btc-dca-settings-api
+      CodeUri: settings-api/
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      Timeout: 15
+      MemorySize: 128
+      Role: !GetAtt SettingsApiRole.Arn
+      Description: Read and update BTC DCA settings, balance, and history
+      Environment:
+        Variables:
+          GMO_API_CREDENTIALS_PARAMETER: !Sub /gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
+      Events:
+        GetSettings:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BtcDcaApi
+            Path: /settings
+            Method: GET
+        SaveSettings:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BtcDcaApi
+            Path: /settings
+            Method: POST
+        GetBalance:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BtcDcaApi
+            Path: /balance
+            Method: GET
+        GetHistory:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BtcDcaApi
+            Path: /history
+            Method: GET
+
   BtcAutoPurchaseFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       FunctionName: btc-auto-purchase
       CodeUri: auto-purchase/
       Handler: btc_auto_purchase.lambda_handler
-      Description: GMOコインでBTCを自動購入するLambda関数
+      Runtime: python3.12
+      Timeout: 30
+      MemorySize: 256
+      Description: Buy BTC on GMO Coin when the configured schedule is due
       Environment:
         Variables:
           SNS_TOPIC_ARN: !If
             - CreateSnsResources
             - !Ref BtcPurchaseNotificationTopic
-            - ""
+            - ''
           DRY_RUN: !Ref DryRun
-          GMO_API_CREDENTIALS_PARAMETER: !Sub "/gmo-btc-dca/${EnvironmentName}/gmo-api-credentials"
+          GMO_API_CREDENTIALS_PARAMETER: !Sub /gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -68,25 +286,25 @@ Resources:
               Resource: !If
                 - CreateSnsResources
                 - !Ref BtcPurchaseNotificationTopic
-                - !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:*"
+                - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:*
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
-              Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/btc-dca-settings"
+              Resource: !GetAtt BtcDcaSettingsTable.Arn
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
-              Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/btc-dca-history"
+              Resource: !GetAtt BtcDcaHistoryTable.Arn
             - Effect: Allow
               Action:
                 - ssm:GetParameter
-              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gmo-btc-dca/${EnvironmentName}/gmo-api-credentials"
+              Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
       Events:
         ScheduledPurchase:
           Type: Schedule
           Properties:
             Name: btc-daily-purchase
-            Description: BTC定期購入スケジュール
+            Description: Check the BTC recurring purchase schedule
             Schedule: !Ref ScheduleExpression
             Enabled: true
 
@@ -95,7 +313,7 @@ Resources:
     Condition: CreateSnsResources
     Properties:
       TopicName: btc-purchase-notifications
-      DisplayName: BTC購入通知
+      DisplayName: BTC purchase notifications
 
   BtcPurchaseEmailSubscription:
     Type: AWS::SNS::Subscription
@@ -106,15 +324,35 @@ Resources:
       Endpoint: !Ref NotificationEmail
 
 Outputs:
-  FunctionArn:
-    Description: Lambda関数のARN
+  AutoPurchaseFunctionArn:
+    Description: Auto-purchase Lambda function ARN
     Value: !GetAtt BtcAutoPurchaseFunction.Arn
 
-  FunctionName:
-    Description: Lambda関数名
-    Value: !Ref BtcAutoPurchaseFunction
+  SettingsFunctionArn:
+    Description: Settings API Lambda function ARN
+    Value: !GetAtt SettingsApiFunction.Arn
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+
+  UserPoolClientId:
+    Description: Cognito SPA client ID
+    Value: !Ref CognitoUserPoolClient
+
+  SettingsTableName:
+    Description: Settings DynamoDB table
+    Value: !Ref BtcDcaSettingsTable
+
+  HistoryTableName:
+    Description: History DynamoDB table
+    Value: !Ref BtcDcaHistoryTable
+
+  ApiBaseUrl:
+    Description: Cognito-protected API Gateway base URL
+    Value: !Sub https://${BtcDcaApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod
 
   SnsTopicArn:
-    Description: SNSトピックのARN
+    Description: SNS topic ARN
     Condition: CreateSnsResources
     Value: !Ref BtcPurchaseNotificationTopic

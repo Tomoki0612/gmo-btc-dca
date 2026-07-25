@@ -44,7 +44,8 @@ const formFields = {
   },
 };
 
-const API_BASE = 'https://5slu1ftn2g.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_BASE = process.env.REACT_APP_API_BASE_URL
+  || 'https://58zgd9twgk.execute-api.ap-northeast-1.amazonaws.com/prod';
 const API_URL = `${API_BASE}/settings`;
 const BALANCE_URL = `${API_BASE}/balance`;
 const HISTORY_URL = `${API_BASE}/history`;

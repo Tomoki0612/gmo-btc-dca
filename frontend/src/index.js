@@ -8,8 +8,8 @@ import reportWebVitals from './reportWebVitals';
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: 'ap-northeast-1_4R5AGWXtg',
-      userPoolClientId: '6icknk5b5htbb5e7kbciktej45',
+      userPoolId: process.env.REACT_APP_COGNITO_USER_POOL_ID || 'ap-northeast-1_4R5AGWXtg',
+      userPoolClientId: process.env.REACT_APP_COGNITO_USER_POOL_CLIENT_ID || '6icknk5b5htbb5e7kbciktej45',
     }
   }
 });

@@ -1,56 +1,47 @@
-.PHONY: build deploy deploy-guided invoke logs clean validate
+.PHONY: build deploy changeset invoke logs-auto logs-settings outputs clean validate help
 
-# SAMビルド
+STACK_NAME := btc-auto-purchase
+REGION := ap-northeast-1
+
 build:
 	sam build
 
-# 初回デプロイ（対話形式でパラメータを設定）
-deploy-guided: build
-	sam deploy --guided
-
-# 通常デプロイ（samconfig.tomlの設定を使用）
 deploy: build
 	sam deploy
 
-# パラメータを指定してデプロイ
-# 使用例: make deploy-with-params EMAIL=your@email.com ENV=prod DRY_RUN=true
-deploy-with-params: build
-	sam deploy \
-		--parameter-overrides \
-		"EnvironmentName=$(or $(ENV),prod)" \
-		"DryRun=$(or $(DRY_RUN),false)" \
-		"NotificationEmail=$(EMAIL)"
+changeset: build
+	sam deploy --no-execute-changeset --no-confirm-changeset
 
-# ローカルでLambda関数を実行（env.jsonが必要）
 invoke:
 	sam local invoke BtcAutoPurchaseFunction --env-vars auto-purchase/env.json
 
-# CloudWatch Logsをリアルタイム表示
-logs:
-	sam logs -n BtcAutoPurchaseFunction --stack-name btc-auto-purchase --tail
+logs-auto:
+	sam logs -n BtcAutoPurchaseFunction --stack-name $(STACK_NAME) --region $(REGION) --tail
 
-# テンプレートの検証
+logs-settings:
+	sam logs -n SettingsApiFunction --stack-name $(STACK_NAME) --region $(REGION) --tail
+
+outputs:
+	aws cloudformation describe-stacks \
+		--stack-name $(STACK_NAME) \
+		--region $(REGION) \
+		--query 'Stacks[0].Outputs' \
+		--output table
+
 validate:
-	sam validate
+	sam validate --lint
 
-# ビルド成果物を削除
 clean:
 	rm -rf .aws-sam
 
-# スタックを削除（注意：すべてのリソースが削除されます）
-delete:
-	sam delete --stack-name btc-auto-purchase
-
-# ヘルプ
 help:
 	@echo "使用可能なコマンド:"
-	@echo "  make build          - SAMビルド"
-	@echo "  make deploy-guided  - 初回デプロイ（対話形式）"
-	@echo "  make deploy         - 通常デプロイ"
-	@echo "  make deploy-with-params EMAIL=xxx ENV=prod DRY_RUN=false"
-	@echo "                      - パラメータ指定デプロイ"
-	@echo "  make invoke         - ローカル実行"
-	@echo "  make logs           - ログ表示"
-	@echo "  make validate       - テンプレート検証"
-	@echo "  make clean          - ビルド成果物削除"
-	@echo "  make delete         - スタック削除"
+	@echo "  make validate       - SAMテンプレートをlint"
+	@echo "  make build          - 両LambdaをPython 3.12向けにビルド"
+	@echo "  make changeset      - 未実行のCloudFormation変更セットを作成"
+	@echo "  make deploy         - プロジェクト全体をSAMでデプロイ"
+	@echo "  make invoke         - 自動購入Lambdaをローカル実行"
+	@echo "  make logs-auto      - 自動購入Lambdaのログを表示"
+	@echo "  make logs-settings  - 設定API Lambdaのログを表示"
+	@echo "  make outputs        - スタックOutputsを表示"
+	@echo "  make clean          - SAMビルド成果物を削除"

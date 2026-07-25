@@ -16,21 +16,24 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 | Root directory | `frontend` |
 | Node version (環境変数 `NODE_VERSION`) | `20` |
 
-### 移行時の手順
+バックエンド接続先は次の環境変数で上書きできます。未設定時は本番SAMスタックの
+Outputsに対応する既定値を使用します。
 
-1. Cloudflare ダッシュボード → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**
-2. このリポジトリを選択し、上記のビルド設定を入力
-3. デプロイ完了後、`https://<project>.pages.dev` でアクセス可能
-4. API Gateway側でCognito Authorizerと、`Authorization` ヘッダーを許可するCORS設定を反映
-5. AWS Amplify Hosting 側はアプリ削除、もしくはブランチの Auto build OFF で停止
+| 環境変数 | SAM Output |
+|---|---|
+| `REACT_APP_API_BASE_URL` | `ApiBaseUrl` |
+| `REACT_APP_COGNITO_USER_POOL_ID` | `UserPoolId` |
+| `REACT_APP_COGNITO_USER_POOL_CLIENT_ID` | `UserPoolClientId` |
+
+ローカル設定例は `.env.example` を参照してください。
 
 ### API認証
 
 ログイン後、`fetchAuthSession()` で取得したCognito IDトークンを、バックエンドAPIの
 `Authorization` ヘッダーへ設定する。外部API（mempool.space）にはトークンを送信しない。
 
-初回の認証有効化は、APIのCORS更新 → フロント公開 → APIのCognito認証必須化の順で行う。
-詳しくは `aws-lambda/settings-api/DEPLOY.md` を参照。
+API Gateway、Cognito Authorizer、CORS、Lambda実行権限はすべて
+`aws-lambda/template.yaml` で管理します。個別のAWS CLI設定は不要です。
 
 ## Available Scripts
 

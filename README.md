@@ -4,9 +4,10 @@ GMOコインのAPIを使ってビットコイン（BTC）を自動積立する�
 
 ## 機能
 
-- 毎月28日にBTCを自動購入
+- 画面で設定した頻度・日付・時刻にBTCを自動購入
 - 成行注文
 - エラー時の通知機能（Lambda版）
+- Cognitoログインで保護された設定・残高・履歴API
 
 ## 実行環境の選択
 
@@ -25,13 +26,13 @@ GMOコインのAPIを使ってビットコイン（BTC）を自動積立する�
 
 [セットアップ手順](github-actions/README.md)
 
-### 2. AWS Lambda（上級者向け）
+### 2. AWS SAM / Lambda（推奨）
 
 **メリット:**
 - メール通知機能あり（SNS連携）
 - AWSの他サービスと連携可能
-- より高度なカスタマイズが可能
-- ほぼ無料（月100万リクエストまで無料）
+- Lambda、API Gateway、Cognito、DynamoDB、EventBridgeを1スタックで管理
+- GMO API認証情報はSSM Parameter Store StandardのSecureStringで管理
 
 **デメリット:**
 - AWSアカウントが必要
@@ -72,7 +73,7 @@ GMOコインのAPIを使ってビットコイン（BTC）を自動積立する�
 GitHub Actionsのsecretsにて、INVESTMENT_AMOUNT値を変更
 
 #### AWS Lambda
-環境変数のINVESTMENT_AMOUNTの値を変更
+Web画面の設定ページから変更
 
 ## 実行スケジュールの変更
 
@@ -89,10 +90,8 @@ cron式の例：
 - `0 0 * * 1` - 毎週月曜日0時
 
 ### AWS Lambda
-EventBridgeルールのcron式を変更：
-```
-cron(0 0 28 * ? *)  # 毎月28日UTC 0時 = JST 9時
-```
+Web画面で購入頻度・日付・時刻を変更します。EventBridgeは毎時Lambdaを起動し、
+Lambdaが保存済み設定から購入対象時刻かを判定します。
 
 ## 実行ログの確認
 
@@ -113,12 +112,10 @@ cron(0 0 28 * ? *)  # 毎月28日UTC 0時 = JST 9時
 
 ## セキュリティ
 
-- APIキーは環境変数で管理
 - GitHubの場合はSecretsに保存
-- AWSの場合はLambda環境変数に保存
+- AWSの場合はSSM Parameter Store StandardのSecureStringに保存
 - コードにAPIキーを直接書き込まない
 
 ## 免責事項
 
 このシステムを使用したことによる損失について、開発者は一切の責任を負いません。投資は自己責任で行ってください。
-

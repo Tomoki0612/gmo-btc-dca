@@ -1,0 +1,17 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "btc-auto-purchase"
+region = "ap-northeast-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+resolve_s3 = true
+s3_prefix = "btc-auto-purchase"
+disable_rollback = false
+parameter_overrides = "EnvironmentName=\"prod\" ScheduleExpression=\"cron(0 * * * ? *)\" EnableSnsNotification=\"false\" NotificationEmail=\"\" DryRun=\"true\""
+
+[default.build.parameters]
+use_container = false
+
+[default.global.parameters]
+region = "ap-northeast-1"
