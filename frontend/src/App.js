@@ -938,6 +938,28 @@ export function validateRecommendedFees(payload) {
   return normalized;
 }
 
+export function buildFeeTiers(fees) {
+  const tiers = [
+    { k: 'fast', label: '高速', desc: '次のブロックを狙う', eta: '〜10分', satvb: fees.fastestFee },
+    { k: 'normal', label: '標準', desc: '数ブロック以内', eta: '〜30分', satvb: fees.halfHourFee, recommended: true },
+    { k: 'slow', label: '低速', desc: '急がない時に', eta: '〜1時間', satvb: fees.hourFee },
+  ];
+  const allSame = tiers.every((tier) => tier.satvb === tiers[0].satvb);
+  if (!allSame) return { allSame, tiers };
+
+  return {
+    allSame,
+    tiers: [{
+      k: 'same',
+      label: '全速度帯',
+      desc: 'ネットワークが空いているため現在は同額',
+      eta: '混雑差なし',
+      satvb: tiers[0].satvb,
+      recommended: true,
+    }],
+  };
+}
+
 function levelFromSatVb(satvb) {
   if (satvb < 10) return 'low';
   if (satvb > 30) return 'high';
@@ -1009,11 +1031,7 @@ function NetworkPage({ headingRef }) {
     : 0;
   const hasJpy = btcJpy > 0;
 
-  const speeds = [
-    { k: 'fast', label: '高速', desc: '次のブロックを狙う', eta: '〜10分', satvb: Number(fees.fastestFee) || 0 },
-    { k: 'normal', label: '標準', desc: '数ブロック以内', eta: '〜30分', satvb: halfHour, recommended: true },
-    { k: 'slow', label: '低速', desc: '急がない時に', eta: '〜1時間', satvb: Number(fees.hourFee) || 0 },
-  ];
+  const { allSame, tiers: speeds } = buildFeeTiers(fees);
 
   return (
     <main className="net-main">
@@ -1051,7 +1069,10 @@ function NetworkPage({ headingRef }) {
       )}
 
       <section className="fee-list">
-        <h2 className="fee-list__title">送金スピード別の手数料 <span className="fee-card__desc">（{TX_VBYTES} vB送信の参考値）</span></h2>
+        <h2 className="fee-list__title">
+          {allSame ? '現在の推奨手数料' : '送金スピード別の手数料'}
+          {' '}<span className="fee-card__desc">（{TX_VBYTES} vB送信の参考値）</span>
+        </h2>
         {speeds.map((t) => (
           <div key={t.k} className="fee-card" data-recommended={t.recommended}>
             <div className="fee-card__head">

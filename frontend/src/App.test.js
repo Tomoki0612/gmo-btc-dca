@@ -1,5 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
-import App, { authFetch, validateRecommendedFees } from './App';
+import App, { authFetch, buildFeeTiers, validateRecommendedFees } from './App';
 
 jest.mock('aws-amplify/auth', () => ({
   fetchAuthSession: jest.fn(),
@@ -57,4 +57,30 @@ test('validateRecommendedFees rejects missing or zero fee fields', () => {
     fastestFee: 1,
     halfHourFee: 0,
   })).toThrow('レスポンスが不正');
+});
+
+test('buildFeeTiers collapses identical recommendations into one card', () => {
+  expect(buildFeeTiers({
+    fastestFee: 1,
+    halfHourFee: 1,
+    hourFee: 1,
+  })).toMatchObject({
+    allSame: true,
+    tiers: [{
+      k: 'same',
+      label: '全速度帯',
+      satvb: 1,
+    }],
+  });
+});
+
+test('buildFeeTiers keeps three cards when recommendations differ', () => {
+  const result = buildFeeTiers({
+    fastestFee: 8,
+    halfHourFee: 4,
+    hourFee: 2,
+  });
+
+  expect(result.allSame).toBe(false);
+  expect(result.tiers.map((tier) => tier.satvb)).toEqual([8, 4, 2]);
 });
