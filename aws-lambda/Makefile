@@ -1,5 +1,6 @@
 .PHONY: build deploy changeset configure-discord test-discord invoke logs-auto logs-settings outputs clean validate help
 
+SHELL := /bin/bash
 STACK_NAME := btc-auto-purchase
 REGION := ap-northeast-1
 
