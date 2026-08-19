@@ -44,8 +44,7 @@ const formFields = {
   },
 };
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL
-  || 'https://58zgd9twgk.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 const API_URL = `${API_BASE}/settings`;
 const BALANCE_URL = `${API_BASE}/balance`;
 const HISTORY_URL = `${API_BASE}/history`;
@@ -722,6 +721,7 @@ function HistoryItem({ item }) {
 
   if (item.type === 'purchase') {
     const ok = item.status === 'ok';
+    const pending = item.status === 'pending';
     return (
       <article className={`tl-row tl-row--purchase ${ok ? '' : 'tl-row--failed'}`}>
         <div className="tl-date" aria-label={fmtHistDate(item.at)}>
@@ -753,7 +753,7 @@ function HistoryItem({ item }) {
           ) : (
             <>
               <div className="tl-line">
-                <span className="tl-fail-badge">失敗</span>
+                <span className="tl-fail-badge">{pending ? '要確認' : '失敗'}</span>
                 <span className="tl-fail-reason">{item.reason || 'エラー'}</span>
               </div>
               <div className="tl-meta">
@@ -763,6 +763,9 @@ function HistoryItem({ item }) {
                     <span className="tl-meta__sep">·</span>
                     <span>¥{Number(item.amount).toLocaleString('ja-JP')} 予定</span>
                   </>
+                )}
+                {item.orderId && (
+                  <><span className="tl-meta__sep">·</span><span>注文ID {item.orderId}</span></>
                 )}
               </div>
             </>
@@ -1457,6 +1460,7 @@ function PasswordPage({ onNavigate, headingRef }) {
 function MainApp({ signOut }) {
   const [page, setPage] = useState('home');
   const [savedSettings, setSavedSettings] = useState(null);
+  const [loadError, setLoadError] = useState('');
   const headingRef = useRef(null);
 
   useEffect(() => {
@@ -1467,8 +1471,8 @@ function MainApp({ signOut }) {
     const load = async () => {
       try {
         const res = await authFetch(API_URL);
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || '設定の取得に失敗しました');
         setSavedSettings({
           amount: data.amount ?? 10000,
           frequency: data.frequency || 'monthly',
@@ -1476,8 +1480,8 @@ function MainApp({ signOut }) {
           scheduleTime: data.scheduleTime ?? 0,
           apiConfigured: !!data.apiConfigured,
         });
-      } catch {
-        /* noop */
+      } catch (e) {
+        setLoadError(e.message || '設定の取得に失敗しました');
       }
     };
     load();
@@ -1492,6 +1496,20 @@ function MainApp({ signOut }) {
     if (updated) setSavedSettings(updated);
     setPage(target === 'settings' ? 'home' : target);
   };
+
+  if (loadError) {
+    return (
+      <div className="root">
+        <main className="hist-main">
+          <h1>設定を読み込めません</h1>
+          <p className="error-message" role="alert">{loadError}</p>
+          <button type="button" className="btn btn--primary" onClick={() => window.location.reload()}>
+            再読み込み
+          </button>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="root">

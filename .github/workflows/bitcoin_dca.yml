@@ -3,18 +3,37 @@ name: Monthly BTC Purchase
 on:
   schedule:
     - cron: '0 0 28 * *'  # 毎月28日の0:00 UTC (日本時間9:00)に実行
-  workflow_dispatch:  # 手動実行用
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: '実注文を行うには BUY BTC と入力'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monthly-btc-purchase
+  cancel-in-progress: false
 
 jobs:
   buy-btc:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
+      - name: Confirm manual real-money order
+        if: github.event_name == 'workflow_dispatch' && inputs.confirmation != 'BUY BTC'
+        run: |
+          echo 'Confirmation did not match; refusing to place an order.'
+          exit 1
+
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 

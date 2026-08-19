@@ -16,8 +16,8 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 | Root directory | `frontend` |
 | Node version (環境変数 `NODE_VERSION`) | `20` |
 
-バックエンド接続先は次の環境変数で上書きできます。未設定時は本番SAMスタックの
-Outputsに対応する既定値を使用します。
+バックエンド接続先には次の環境変数がすべて必須です。本番への誤接続を防ぐため、
+1つでも未設定なら`npm start`と`npm run build`は失敗します。
 
 | 環境変数 | SAM Output |
 |---|---|
@@ -26,6 +26,9 @@ Outputsに対応する既定値を使用します。
 | `REACT_APP_COGNITO_USER_POOL_CLIENT_ID` | `UserPoolClientId` |
 
 ローカル設定例は `.env.example` を参照してください。
+
+API側のSAMパラメータ`FrontendOrigin`にも、ここでデプロイするフロントURLを末尾の
+スラッシュなしで設定してください。
 
 ### API認証
 

@@ -42,7 +42,8 @@ GitHub Actionsを使って、毎月自動でBTCを積立購入する。
 
 1. 「Actions」タブで「Monthly BTC Purchase」をクリック
 2. 「Run workflow」をクリック
-3. 「Run workflow」ボタンを再度クリック
+3. 確認欄へ `BUY BTC` と入力
+4. 「Run workflow」ボタンを再度クリック
 
 数分待って実行結果を確認。緑のチェックマークが出れば成功。
 
@@ -129,3 +130,4 @@ git push origin main
 
 - APIキーは必ずSecretsに保存すること
 - フォークしたリポジトリはPrivateにすることを推奨
+- 同時実行はconcurrency設定で抑止しますが、完了後の手動再実行は別注文になります

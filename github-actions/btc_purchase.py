@@ -6,6 +6,7 @@ import time
 import os
 from datetime import datetime
 import sys
+from decimal import Decimal, ROUND_DOWN
 
 # .envファイルを読み込む
 #load_dotenv()
@@ -23,6 +24,8 @@ if not INVESTMENT_AMOUNT:
     raise ValueError("金額が設定されていません")
 
 INVESTMENT_AMOUNT = int(INVESTMENT_AMOUNT)
+if not 1000 <= INVESTMENT_AMOUNT <= 500000:
+    raise ValueError("INVESTMENT_AMOUNT は1,000〜500,000円で指定してください")
 
 # APIキーとシークレットキーを出力（セキュリティ上の理由から一部のみ表示）
 '''
@@ -35,7 +38,7 @@ def get_btc_price():
         response = requests.get('https://api.coin.z.com/public/v1/ticker?symbol=BTC', timeout=30)
         response.raise_for_status()  # ステータスコードが200以外の場合は例外を発生
         data = response.json()
-        return float(data['data'][0]['last'])
+        return Decimal(str(data['data'][0]['last']))
     except requests.exceptions.RequestException as e:
         print(f"価格取得エラー: {str(e)}")
         raise
@@ -47,7 +50,9 @@ btc_price = get_btc_price()
 amount_jpy = INVESTMENT_AMOUNT
 
 # 購入するBTC数量を計算
-size = round(amount_jpy / btc_price, 5)  # 小数点以下5桁に丸める
+size = (Decimal(amount_jpy) / btc_price).quantize(Decimal("0.00001"), rounding=ROUND_DOWN)
+if size < Decimal("0.00001"):
+    raise ValueError("注文数量がBTCの最小注文数量を下回っています")
 
 timestamp = '{0}000'.format(int(time.mktime(datetime.now().timetuple())))
 method    = 'POST'
@@ -57,7 +62,7 @@ reqBody = {
     "symbol": "BTC",
     "side": "BUY",
     "executionType": "MARKET",
-    "size": str(size)
+    "size": format(size, "f")
 }
 
 text = timestamp + method + path + json.dumps(reqBody)
@@ -84,7 +89,7 @@ try:
         print(f"取引エラー: {response_data.get('messages', '不明なエラー')}")
         sys.exit(1)  # エラー時は非ゼロで終了（GitHub Actions が失敗と判定）
     else:
-        print("取引が正常に完了しました")
+        print("注文が正常に受理されました")
         print(json.dumps(response_data, indent=2, ensure_ascii=False))
 
 except requests.exceptions.Timeout:

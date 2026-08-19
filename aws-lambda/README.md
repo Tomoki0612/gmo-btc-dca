@@ -10,6 +10,7 @@ CloudFormationスタック `btc-auto-purchase` で一括管理します。
 - API Gateway（`/settings`、`/balance`、`/history`）
 - Cognito User PoolとSPAクライアント
 - DynamoDB（`btc-dca-settings`、`btc-dca-history`）
+- DynamoDB（`btc-dca-executions`、同一時間帯の重複注文防止用）
 - EventBridgeの定期実行
 - SNSトピックとメール購読
 - Lambda実行ロールとAPI呼び出し権限
@@ -49,10 +50,24 @@ CloudFormation Import済みです。テーブルとCognitoには`Retain`を設�
 ```bash
 cd aws-lambda
 cp samconfig.toml.example samconfig.toml
-# NotificationEmailとDryRunを確認
+# NotificationEmail、DryRun、AuthorizedUserSub、FrontendOriginを確認
 make validate
 make deploy
 ```
+
+`AuthorizedUserSub` は、この単一ユーザーアプリへのアクセスを許可するCognitoユーザーの
+`sub`です。別のユーザーのIDトークンはAPIが403で拒否します。次のコマンドで確認できます。
+
+```bash
+aws cognito-idp list-users \
+  --user-pool-id <UserPoolId> \
+  --query 'Users[].Attributes[?Name==`sub`].Value' \
+  --output text \
+  --region ap-northeast-1
+```
+
+`FrontendOrigin` は末尾スラッシュなしの実際のフロントURLを指定します。APIのCORSは
+このオリジンだけを許可します。
 
 `make deploy`は次を一括で実行します。
 
@@ -78,6 +93,7 @@ make outputs
 | `UserPoolClientId` | フロントの`REACT_APP_COGNITO_USER_POOL_CLIENT_ID` |
 | `SettingsTableName` | 設定テーブル |
 | `HistoryTableName` | 履歴テーブル |
+| `ExecutionTableName` | 重複注文防止・注文状態テーブル |
 
 ## ローカル確認
 
@@ -96,6 +112,18 @@ make invoke
 make logs-auto
 make logs-settings
 ```
+
+## 注文の安全性
+
+- EventBridgeの同一JST時間枠はDynamoDBの条件付き書き込みで一度だけ実行します。
+- BTC数量は取引所現物の注文単位`0.00001 BTC`へ切り捨てます。
+- 成行注文後に注文・約定APIを照会し、実約定数量、加重平均価格、手数料を履歴へ保存します。
+- 注文送信時のタイムアウトなど、成立有無を断定できないケースは`pending`（要確認）として
+  保存します。この場合は自動再注文しません。GMOコインの注文履歴とCloudWatch Logsを確認してください。
+- 設定APIは金額、頻度、日付、時刻をサーバー側でも検証します。
+
+`btc-dca-executions`はオンデマンドテーブルで、ロック項目はTTLにより約90日後に削除されます。
+追加の常時稼働サービスはありません。
 
 ## 削除について
 

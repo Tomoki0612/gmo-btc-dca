@@ -35,6 +35,17 @@ Parameters:
       - 'false'
     Description: Prevent real GMO Coin orders when true
 
+  AuthorizedUserSub:
+    Type: String
+    AllowedPattern: '^[0-9a-fA-F-]{36}$'
+    Description: Cognito sub of the only user allowed to access this single-user application
+
+  FrontendOrigin:
+    Type: String
+    Default: https://gmo-btc-dca.pages.dev
+    AllowedPattern: '^https://[^/]+$'
+    Description: Exact frontend origin allowed by CORS and Cognito callbacks
+
 Conditions:
   CreateSnsResources: !And
     - !Equals [!Ref EnableSnsNotification, 'true']
@@ -72,6 +83,23 @@ Resources:
           KeyType: HASH
         - AttributeName: sk
           KeyType: RANGE
+
+  BtcDcaExecutionTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: btc-dca-executions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: executionKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: executionKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
 
   CognitoUserPool:
     Type: AWS::Cognito::UserPool
@@ -127,7 +155,7 @@ Resources:
       SupportedIdentityProviders:
         - COGNITO
       CallbackURLs:
-        - https://d84l1y8p4kdic.cloudfront.net
+        - !Ref FrontendOrigin
       AllowedOAuthFlows:
         - code
       AllowedOAuthScopes:
@@ -190,7 +218,7 @@ Resources:
       EndpointConfiguration:
         Type: REGIONAL
       Cors:
-        AllowOrigin: "'*'"
+        AllowOrigin: !Sub "'${FrontendOrigin}'"
         AllowHeaders: "'Content-Type,Authorization'"
         AllowMethods: "'GET,POST,OPTIONS'"
       Auth:
@@ -205,12 +233,12 @@ Resources:
         UNAUTHORIZED:
           ResponseParameters:
             Headers:
-              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Origin: !Sub "'${FrontendOrigin}'"
               Access-Control-Allow-Headers: "'Content-Type,Authorization'"
         ACCESS_DENIED:
           ResponseParameters:
             Headers:
-              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Origin: !Sub "'${FrontendOrigin}'"
               Access-Control-Allow-Headers: "'Content-Type,Authorization'"
 
   SettingsApiFunction:
@@ -231,6 +259,8 @@ Resources:
       Environment:
         Variables:
           GMO_API_CREDENTIALS_PARAMETER: !Sub /gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
+          AUTHORIZED_USER_SUB: !Ref AuthorizedUserSub
+          ALLOWED_ORIGIN: !Ref FrontendOrigin
       Events:
         GetSettings:
           Type: Api
@@ -266,7 +296,7 @@ Resources:
       CodeUri: auto-purchase/
       Handler: btc_auto_purchase.lambda_handler
       Runtime: python3.12
-      Timeout: 30
+      Timeout: 45
       MemorySize: 256
       Description: Buy BTC on GMO Coin when the configured schedule is due
       Environment:
@@ -278,6 +308,7 @@ Resources:
           DRY_RUN: !Ref DryRun
           GMO_API_CREDENTIALS_PARAMETER: !Sub /gmo-btc-dca/${EnvironmentName}/gmo-api-credentials
           DISCORD_WEBHOOK_PARAMETER: !Sub /gmo-btc-dca/${EnvironmentName}/discord-webhook-url
+          EXECUTION_TABLE_NAME: !Ref BtcDcaExecutionTable
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -296,6 +327,11 @@ Resources:
               Action:
                 - dynamodb:PutItem
               Resource: !GetAtt BtcDcaHistoryTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt BtcDcaExecutionTable.Arn
             - Effect: Allow
               Action:
                 - ssm:GetParameter
@@ -350,6 +386,10 @@ Outputs:
   HistoryTableName:
     Description: History DynamoDB table
     Value: !Ref BtcDcaHistoryTable
+
+  ExecutionTableName:
+    Description: Idempotency and order reconciliation state table
+    Value: !Ref BtcDcaExecutionTable
 
   ApiBaseUrl:
     Description: Cognito-protected API Gateway base URL

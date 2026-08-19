@@ -21,9 +21,10 @@ ssm = boto3.client("ssm")
 GMO_API_CREDENTIALS_PARAMETER = os.environ.get(
     "GMO_API_CREDENTIALS_PARAMETER", "/gmo-btc-dca/prod/gmo-api-credentials"
 )
+AUTHORIZED_USER_SUB = os.environ.get("AUTHORIZED_USER_SUB", "").strip()
 
 HEADERS = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": os.environ.get("ALLOWED_ORIGIN", "http://localhost:3000"),
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type,Authorization",
 }
@@ -34,6 +35,7 @@ GMO_PUBLIC = "https://api.coin.z.com/public"
 JST = timezone(timedelta(hours=9))
 
 USER_ID = "user1"
+SETTING_FIELDS = {"amount", "frequency", "scheduleDay", "scheduleTime"}
 
 FREQ_LABEL = {"daily": "毎日", "weekly": "毎週", "monthly": "毎月"}
 WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"]
@@ -100,6 +102,67 @@ def _json_response(status, body):
         "statusCode": status,
         "headers": HEADERS,
         "body": json.dumps(body, default=decimal_to_num),
+    }
+
+
+def _request_user_sub(event):
+    return (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("claims", {})
+        .get("sub")
+    )
+
+
+def _is_authorized_user(event):
+    # Local direct invocations and tests may intentionally omit the deployment parameter.
+    if not AUTHORIZED_USER_SUB:
+        return True
+    return _request_user_sub(event) == AUTHORIZED_USER_SUB
+
+
+def _integer(value, label):
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{label}は整数で指定してください")
+    return value
+
+
+def _validated_settings_patch(body, existing):
+    """Validate a complete prospective schedule whenever a setting is changed."""
+    if not isinstance(body, dict):
+        raise ValueError("JSONオブジェクトを指定してください")
+    if not (SETTING_FIELDS & body.keys()):
+        return {}
+
+    candidate = {key: existing.get(key) for key in SETTING_FIELDS}
+    candidate.update({key: body.get(key) for key in SETTING_FIELDS if key in body})
+
+    amount = _integer(candidate.get("amount"), "積立金額")
+    if not 1000 <= amount <= 500000:
+        raise ValueError("積立金額は1,000円以上500,000円以下にしてください")
+
+    frequency = candidate.get("frequency")
+    if frequency not in {"daily", "weekly", "monthly"}:
+        raise ValueError("積立頻度はdaily、weekly、monthlyのいずれかにしてください")
+
+    schedule_time = _integer(candidate.get("scheduleTime"), "積立時間")
+    if not 0 <= schedule_time <= 23:
+        raise ValueError("積立時間は0〜23で指定してください")
+
+    schedule_day = candidate.get("scheduleDay")
+    if frequency == "daily":
+        schedule_day = None
+    else:
+        schedule_day = _integer(schedule_day, "積立日")
+        upper = 7 if frequency == "weekly" else 28
+        if not 1 <= schedule_day <= upper:
+            raise ValueError(f"積立日は1〜{upper}で指定してください")
+
+    return {
+        "amount": amount,
+        "frequency": frequency,
+        "scheduleDay": schedule_day,
+        "scheduleTime": schedule_time,
     }
 
 
@@ -296,6 +359,9 @@ def _handle_history():
                 "amount": it.get("amount"),
                 "btc": it.get("btc"),
                 "rate": it.get("rate"),
+                "fee": it.get("fee"),
+                "orderId": it.get("orderId"),
+                "requestedAmount": it.get("requestedAmount"),
                 "reason": it.get("reason"),
             })
         elif t == "change":
@@ -315,6 +381,9 @@ def lambda_handler(event, context):
 
     if method == "OPTIONS":
         return {"statusCode": 200, "headers": HEADERS, "body": ""}
+
+    if not _is_authorized_user(event):
+        return _json_response(403, {"message": "このユーザーにはアクセス権がありません"})
 
     if path.endswith("/balance"):
         if method == "GET":
@@ -341,7 +410,14 @@ def lambda_handler(event, context):
         except json.JSONDecodeError:
             return _json_response(400, {"message": "JSON形式が正しくありません"})
 
+        if not isinstance(body, dict):
+            return _json_response(400, {"message": "JSONオブジェクトを指定してください"})
+
         existing = table.get_item(Key={"userId": USER_ID}).get("Item") or {}
+        try:
+            settings_patch = _validated_settings_patch(body, existing)
+        except ValueError as e:
+            return _json_response(400, {"message": str(e)})
         try:
             old_key, old_secret, credential_source = _load_api_credentials(existing)
         except Exception as e:
@@ -354,6 +430,10 @@ def lambda_handler(event, context):
 
         try:
             if new_key and new_secret:
+                try:
+                    _fetch_assets(new_key, new_secret)
+                except Exception as e:
+                    return _json_response(400, {"message": f"GMO API認証情報を確認できませんでした: {e}"})
                 _put_api_credentials(new_key, new_secret)
                 final_key, final_secret = new_key, new_secret
             elif credential_source == "dynamodb":
@@ -371,11 +451,8 @@ def lambda_handler(event, context):
             if key not in {"apiKey", "apiSecret"}
         }
         item["userId"] = USER_ID
-        for key in ["amount", "frequency", "scheduleDay", "scheduleTime"]:
-            if key not in body:
-                continue
-            val = body.get(key)
-            if val is None or val == "":
+        for key, val in settings_patch.items():
+            if val is None:
                 item.pop(key, None)
             else:
                 item[key] = val

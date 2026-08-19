@@ -8,7 +8,7 @@ capabilities = "CAPABILITY_NAMED_IAM"
 resolve_s3 = true
 s3_prefix = "btc-auto-purchase"
 disable_rollback = false
-parameter_overrides = "EnvironmentName=\"prod\" ScheduleExpression=\"cron(0 * * * ? *)\" EnableSnsNotification=\"false\" NotificationEmail=\"\" DryRun=\"true\""
+parameter_overrides = "EnvironmentName=\"prod\" ScheduleExpression=\"cron(0 * * * ? *)\" EnableSnsNotification=\"false\" NotificationEmail=\"\" DryRun=\"true\" AuthorizedUserSub=\"00000000-0000-0000-0000-000000000000\" FrontendOrigin=\"https://example.pages.dev\""
 
 [default.build.parameters]
 use_container = false

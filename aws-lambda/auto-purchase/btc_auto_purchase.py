@@ -8,7 +8,7 @@ import os
 import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime, timezone, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from urllib.parse import urlparse
 
 JST = timezone(timedelta(hours=9))
@@ -17,6 +17,9 @@ JST = timezone(timedelta(hours=9))
 dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
 table = dynamodb.Table("btc-dca-settings")
 history_table = dynamodb.Table("btc-dca-history")
+execution_table = dynamodb.Table(
+    os.environ.get("EXECUTION_TABLE_NAME", "btc-dca-executions")
+)
 ssm = boto3.client("ssm")
 SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
 DRY_RUN = os.environ.get('DRY_RUN')
@@ -28,6 +31,23 @@ DISCORD_WEBHOOK_PARAMETER = os.environ.get(
 )
 
 USER_ID = "user1"
+BTC_ORDER_STEP = Decimal("0.00001")
+
+
+class DuplicateExecution(Exception):
+    """The current schedule slot has already been claimed."""
+
+
+class OrderReconciliationError(Exception):
+    """An order was accepted but its final executions could not be confirmed."""
+
+    def __init__(self, order_id, message):
+        super().__init__(message)
+        self.order_id = order_id
+
+
+class OrderSubmissionUncertain(Exception):
+    """The exchange may have accepted an order although the response was lost."""
 
 
 def _get_secure_parameter(name):
@@ -61,7 +81,16 @@ def _get_api_credentials(settings):
     return None, None
 
 
-def _put_purchase_history(status, amount_jpy, btc=None, rate=None, reason=None):
+def _put_purchase_history(
+    status,
+    amount_jpy,
+    btc=None,
+    rate=None,
+    reason=None,
+    order_id=None,
+    fee=None,
+    requested_amount=None,
+):
     """積立実行の履歴を DynamoDB に記録する。"""
     ts = int(time.time() * 1000)
     sk = f"{ts:013d}#purchase#{uuid.uuid4().hex[:6]}"
@@ -80,12 +109,95 @@ def _put_purchase_history(status, amount_jpy, btc=None, rate=None, reason=None):
         item["rate"] = Decimal(str(round(float(rate), 2)))
     if reason:
         item["reason"] = str(reason)[:200]
+    if order_id is not None:
+        item["orderId"] = str(order_id)
+    if fee is not None:
+        item["fee"] = Decimal(str(fee))
+    if requested_amount is not None:
+        item["requestedAmount"] = int(requested_amount)
 
     clean = {k: v for k, v in item.items() if v is not None}
     try:
         history_table.put_item(Item=clean)
     except Exception as e:
         print(f"購入履歴の保存に失敗: {e}")
+
+
+def _execution_key(now):
+    return f"{USER_ID}#{now.strftime('%Y-%m-%dT%H:00%z')}"
+
+
+def _acquire_execution(now):
+    """Claim one JST schedule slot atomically before any order is submitted."""
+    key = _execution_key(now)
+    try:
+        execution_table.put_item(
+            Item={
+                "executionKey": key,
+                "status": "started",
+                "startedAt": now.isoformat(timespec="seconds"),
+                "expiresAt": int(now.timestamp()) + 90 * 24 * 60 * 60,
+            },
+            ConditionExpression="attribute_not_exists(executionKey)",
+        )
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise DuplicateExecution(key) from e
+        raise
+    return key
+
+
+def _update_execution(key, status, **values):
+    names = {"#status": "status"}
+    attrs = {":status": status, ":updatedAt": datetime.now(JST).isoformat(timespec="seconds")}
+    assignments = ["#status = :status", "updatedAt = :updatedAt"]
+    for index, (name, value) in enumerate(values.items()):
+        token = f":value{index}"
+        names[f"#field{index}"] = name
+        attrs[token] = value
+        assignments.append(f"#field{index} = {token}")
+    execution_table.update_item(
+        Key={"executionKey": key},
+        UpdateExpression="SET " + ", ".join(assignments),
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=attrs,
+    )
+
+
+def _validate_purchase_settings(settings):
+    try:
+        amount = int(settings["amount"])
+        frequency = settings["frequency"]
+        schedule_time = int(settings["scheduleTime"])
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("積立設定が不足または不正です")
+
+    if not 1000 <= amount <= 500000:
+        raise ValueError("積立金額は1,000円以上500,000円以下にしてください")
+    if frequency not in {"daily", "weekly", "monthly"}:
+        raise ValueError("積立頻度が不正です")
+    if not 0 <= schedule_time <= 23:
+        raise ValueError("積立時間は0〜23時で指定してください")
+
+    schedule_day = settings.get("scheduleDay")
+    if frequency == "weekly":
+        try:
+            schedule_day = int(schedule_day)
+        except (TypeError, ValueError):
+            raise ValueError("曜日を指定してください")
+        if not 1 <= schedule_day <= 7:
+            raise ValueError("曜日は1〜7で指定してください")
+    elif frequency == "monthly":
+        try:
+            schedule_day = int(schedule_day)
+        except (TypeError, ValueError):
+            raise ValueError("日付を指定してください")
+        if not 1 <= schedule_day <= 28:
+            raise ValueError("日付は1〜28で指定してください")
+    else:
+        schedule_day = None
+
+    return amount, frequency, schedule_day, schedule_time
 
 # SNSクライアントの初期化
 sns = boto3.client('sns', region_name='ap-northeast-1')  # 東京リージョン
@@ -170,8 +282,13 @@ def get_account_balance():
             print(error_msg)
             return None
         
-        # 買付余力（availableAmount）を取得
-        available_amount = float(response_data['data'].get('availableAmount', 0))
+        # 現物買付余力を取得（旧API応答との互換性のためavailableAmountへフォールバック）
+        available_amount = float(
+            response_data['data'].get(
+                'availableAmountForSpot',
+                response_data['data'].get('availableAmount', 0),
+            )
+        )
         return available_amount
         
     except Exception as e:
@@ -184,7 +301,7 @@ def get_btc_price():
         response = requests.get('https://api.coin.z.com/public/v1/ticker?symbol=BTC', timeout=30)
         response.raise_for_status() # ステータスコードが200以外の場合は例外を発生
         data = response.json()
-        return float(data['data'][0]['last'])
+        return Decimal(str(data['data'][0]['last']))
     except requests.exceptions.RequestException as e:
         print(f"価格取得エラー: {str(e)}")
         raise
@@ -195,7 +312,9 @@ def place_order(amount_jpy):
     btc_price = get_btc_price()
     
     # 指定円分のBTCを計算
-    size = round(amount_jpy / btc_price, 5)  # 小数点以下5桁に丸める
+    size = (Decimal(amount_jpy) / btc_price).quantize(BTC_ORDER_STEP, rounding=ROUND_DOWN)
+    if size < BTC_ORDER_STEP:
+        raise ValueError("注文数量がBTCの最小注文数量を下回っています")
         
     timestamp = '{0}000'.format(int(time.mktime(datetime.now().timetuple())))
     method = 'POST'
@@ -205,7 +324,7 @@ def place_order(amount_jpy):
         "symbol": "BTC",
         "side": "BUY",
         "executionType": "MARKET",
-        "size": str(size)
+        "size": format(size, "f")
     }
     
     text = timestamp + method + path + json.dumps(reqBody)
@@ -219,8 +338,7 @@ def place_order(amount_jpy):
     
     try:
         if DRY_RUN == "true":
-            response_data = {"data":"DRY_RUN"}
-            return response_data, btc_price, size
+            return "DRY_RUN", btc_price, size
         else:
             res = requests.post(
                 endPoint + path,
@@ -240,17 +358,80 @@ def place_order(amount_jpy):
         else:
             print("取引が正常に完了しました")
             print(json.dumps(response_data, indent=2, ensure_ascii=False))
-            return response_data, btc_price, size
+            order_id = response_data.get("data")
+            if not order_id:
+                raise OrderSubmissionUncertain(
+                    "注文は受理されましたが注文IDを取得できませんでした。約定有無の確認が必要です"
+                )
+            return str(order_id), btc_price, size
             
-    except requests.exceptions.Timeout:
+    except requests.exceptions.Timeout as e:
         print("APIリクエストがタイムアウトしました")
-        raise
+        raise OrderSubmissionUncertain("注文応答がタイムアウトしました。約定有無の確認が必要です") from e
     except requests.exceptions.RequestException as e:
         print(f"API通信エラー: {str(e)}")
-        raise
-    except json.JSONDecodeError:
+        raise OrderSubmissionUncertain("注文送信中に通信エラーが発生しました。約定有無の確認が必要です") from e
+    except json.JSONDecodeError as e:
         print("JSONデコードエラー: APIレスポンスの解析に失敗しました")
-        raise
+        raise OrderSubmissionUncertain(
+            "注文応答を解析できませんでした。約定有無の確認が必要です"
+        ) from e
+
+
+def _private_get(path, params):
+    timestamp = str(int(time.time() * 1000))
+    sign = hmac.new(
+        API_SECRET.encode("ascii"),
+        f"{timestamp}GET{path}".encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    response = requests.get(
+        f"https://api.coin.z.com/private{path}",
+        headers={
+            "API-KEY": API_KEY,
+            "API-TIMESTAMP": timestamp,
+            "API-SIGN": sign,
+        },
+        params=params,
+        timeout=10,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if data.get("status") != 0:
+        raise RuntimeError(f"GMO APIエラー: {data.get('messages', '不明なエラー')}")
+    return data.get("data", {})
+
+
+def _wait_for_execution(order_id, attempts=5, delay=1):
+    """Return actual filled size, weighted rate, and fee for a market FAK order."""
+    for attempt in range(attempts):
+        order_data = _private_get("/v1/orders", {"orderId": order_id})
+        orders = order_data.get("list", [])
+        status = orders[0].get("status") if orders else None
+
+        execution_data = _private_get("/v1/executions", {"orderId": order_id})
+        executions = execution_data.get("list", [])
+        if executions and status in {"EXECUTED", "CANCELED", "EXPIRED"}:
+            filled = sum((Decimal(str(row["size"])) for row in executions), Decimal("0"))
+            gross = sum(
+                (Decimal(str(row["size"])) * Decimal(str(row["price"])) for row in executions),
+                Decimal("0"),
+            )
+            fee = sum((Decimal(str(row.get("fee", "0"))) for row in executions), Decimal("0"))
+            if filled <= 0:
+                break
+            return {
+                "btc": filled,
+                "rate": gross / filled,
+                "gross": gross,
+                "fee": fee,
+                "orderStatus": status,
+            }
+        if status in {"CANCELED", "EXPIRED"}:
+            break
+        if attempt + 1 < attempts:
+            time.sleep(delay)
+    raise OrderReconciliationError(order_id, f"注文 {order_id} の約定結果を確認できませんでした")
 
 def lambda_handler(event, context):
     """Lambda関数のメインハンドラー"""
@@ -261,6 +442,9 @@ def lambda_handler(event, context):
         )
         return {"statusCode": 200, "body": "通知テスト完了"}
 
+    execution_key = None
+    order_id = None
+    investment_amount = None
     try:
         # DynamoDBから設定を取得
         response = table.get_item(Key={"userId": "user1"})
@@ -268,28 +452,24 @@ def lambda_handler(event, context):
         if not settings:
             raise ValueError("設定が見つかりません")
 
-        global API_KEY, API_SECRET, INVESTMENT_AMOUNT
+        global API_KEY, API_SECRET
         API_KEY, API_SECRET = _get_api_credentials(settings)
-        INVESTMENT_AMOUNT = int(settings.get("amount", 0))
-
+        investment_amount, frequency, schedule_day, schedule_time = _validate_purchase_settings(settings)
         now = datetime.now(JST)
-        frequency = settings.get("frequency")
-        schedule_day = settings.get("scheduleDay")
-        schedule_time = settings.get("scheduleTime")
 
-        if schedule_time is not None and now.hour != int(schedule_time):
+        if now.hour != schedule_time:
             print(f"実行時間外: 現在{now.hour}時 / 設定{schedule_time}時")
             return {"statusCode": 200, "body": "スキップ（時間外）"}
 
         if frequency == "weekly":
             # Python: 月=0, 火=1 ... 日=6
             # DynamoDB: 月=1, 火=2 ... 日=7
-            if schedule_day and now.weekday() + 1 != int(schedule_day):
+            if now.weekday() + 1 != schedule_day:
                 print(f"実行曜日外: 現在{now.weekday()+1} / 設定{schedule_day}")
                 return {"statusCode": 200, "body": "スキップ（曜日外）"}
 
         elif frequency == "monthly":
-            if schedule_day and now.day != int(schedule_day):
+            if now.day != schedule_day:
                 print(f"実行日外: 現在{now.day}日 / 設定{schedule_day}日")
                 return {"statusCode": 200, "body": "スキップ（日付外）"}
 
@@ -297,14 +477,38 @@ def lambda_handler(event, context):
 
         if not API_KEY or not API_SECRET:
             raise ValueError("APIキーが設定されていません")
-        if not INVESTMENT_AMOUNT:
-            raise ValueError("金額が設定されていません")
+        execution_key = _acquire_execution(now)
 
         print(f"積立開始: {datetime.now(JST).isoformat()}")    
-        print(f"積立金額: ¥{INVESTMENT_AMOUNT:,}")
+        print(f"積立金額: ¥{investment_amount:,}")
         
         # 注文実行
-        result, btc_price, btc_amount = place_order(INVESTMENT_AMOUNT)
+        _update_execution(execution_key, "submitting")
+        order_id, quoted_price, requested_btc = place_order(investment_amount)
+        _update_execution(execution_key, "ordered", orderId=order_id)
+
+        if DRY_RUN == "true":
+            execution = {
+                "btc": requested_btc,
+                "rate": quoted_price,
+                "gross": requested_btc * quoted_price,
+                "fee": Decimal("0"),
+                "orderStatus": "DRY_RUN",
+            }
+        else:
+            execution = _wait_for_execution(order_id)
+
+        btc_amount = execution["btc"]
+        btc_price = execution["rate"]
+        fee = execution["fee"]
+        actual_amount = execution["gross"] + fee
+        _update_execution(
+            execution_key,
+            "succeeded",
+            orderId=order_id,
+            executedBtc=btc_amount,
+            actualAmount=actual_amount,
+        )
         
         # 購入後の買付余力を取得
         time.sleep(2)  # API実行後、残高反映まで少し待つ
@@ -316,21 +520,25 @@ def lambda_handler(event, context):
         message = f"""BTC積立が成功しました
 
 日時: {datetime.now(JST).strftime('%Y年%m月%d日 %H:%M:%S')}
-積立金額: ¥{INVESTMENT_AMOUNT:,}
+設定金額: ¥{investment_amount:,}
 BTC価格: ¥{btc_price:,.0f}
 購入数量: {btc_amount} BTC
-購入金額: ¥{btc_price * btc_amount:,.0f}{balance_info}
+約定金額: ¥{execution['gross']:,.0f}
+取引手数料: ¥{fee:,.0f}{balance_info}
 
-注文ID: {result.get('data', 'N/A')}
+注文ID: {order_id}
 """
         print(message)
         
         # 履歴を保存（成功）
         _put_purchase_history(
             status="ok",
-            amount_jpy=INVESTMENT_AMOUNT,
+            amount_jpy=int(actual_amount.to_integral_value()),
             btc=btc_amount,
             rate=btc_price,
+            order_id=order_id,
+            fee=fee,
+            requested_amount=investment_amount,
         )
 
         # メール通知送信（成功）
@@ -343,14 +551,32 @@ BTC価格: ¥{btc_price:,.0f}
             'statusCode': 200,
             'body': json.dumps({
                 'message': '積立成功',
-                'amount_jpy': INVESTMENT_AMOUNT,
-                'btc_price': btc_price,
-                'btc_amount': btc_amount,
-                'response': result
+                'amount_jpy': int(actual_amount.to_integral_value()),
+                'btc_price': str(btc_price),
+                'btc_amount': str(btc_amount),
+                'order_id': order_id,
             }, ensure_ascii=False)
         }
 
+    except DuplicateExecution as e:
+        print(f"重複実行をスキップ: {e}")
+        return {"statusCode": 200, "body": "スキップ（実行済み）"}
+
     except Exception as e:
+        ambiguous = DRY_RUN != "true" and (
+            order_id is not None or isinstance(e, OrderSubmissionUncertain)
+        )
+        history_status = "pending" if ambiguous else "failed"
+        if execution_key:
+            try:
+                _update_execution(
+                    execution_key,
+                    "reconciliation_pending" if ambiguous else "failed",
+                    **({"orderId": order_id} if order_id else {}),
+                    reason=str(e)[:200],
+                )
+            except Exception as update_error:
+                print(f"実行状態の更新に失敗: {update_error}")
         error_message = f"""BTC積立でエラーが発生しました
 
 日時: {datetime.now(JST).strftime('%Y年%m月%d日 %H:%M:%S')}
@@ -361,19 +587,17 @@ BTC価格: ¥{btc_price:,.0f}
         print(f"エラー発生: {str(e)}")
 
         # 履歴を保存（失敗）— スケジュールスキップ以外の本処理エラーのみ
-        try:
-            amount_for_history = INVESTMENT_AMOUNT if 'INVESTMENT_AMOUNT' in globals() else None
-        except Exception:
-            amount_for_history = None
         _put_purchase_history(
-            status="failed",
-            amount_jpy=amount_for_history,
+            status=history_status,
+            amount_jpy=investment_amount,
             reason=str(e),
+            order_id=order_id,
+            requested_amount=investment_amount,
         )
 
         # メール通知送信（エラー）
         send_notification(
-            subject="BTC積立エラー",
+            subject="BTC積立 要確認" if ambiguous else "BTC積立エラー",
             message=error_message
         )
 
