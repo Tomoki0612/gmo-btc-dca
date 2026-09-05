@@ -130,6 +130,16 @@ class SettingsApiCredentialsTest(unittest.TestCase):
         self.assertEqual(response["statusCode"], 400)
         self.module.table.put_item.assert_not_called()
 
+    def test_history_excludes_legacy_dry_runs_from_purchase_totals(self):
+        self.module.history_table.query.return_value = {"Items": [
+            {"sk": "test", "type": "purchase", "status": "ok", "orderId": "DRY_RUN", "amount": 10000},
+            {"sk": "real", "type": "purchase", "status": "ok", "orderId": "123", "amount": 10005},
+            {"sk": "change", "type": "change", "field": "amount"},
+        ]}
+        response = self.module.lambda_handler({"httpMethod": "GET", "path": "/history"}, None)
+        items = json.loads(response["body"])["items"]
+        self.assertEqual([row["id"] for row in items], ["real", "change"])
+
     def test_rejects_another_cognito_user(self):
         self.module.AUTHORIZED_USER_SUB = "allowed-sub"
 
@@ -181,6 +191,7 @@ class AutoPurchaseCredentialsTest(unittest.TestCase):
         self.module.history_table = Mock()
         self.module.SNS_TOPIC_ARN = "arn:aws:sns:ap-northeast-1:123456789012:test"
         self.module.DRY_RUN = "true"
+        self.module._context = None
 
     def test_ssm_credentials_take_precedence_over_legacy_values(self):
         self.module.ssm.get_parameter.return_value = {
@@ -218,7 +229,7 @@ class AutoPurchaseCredentialsTest(unittest.TestCase):
                 "content": "**BTC積立成功**\n\n購入しました",
                 "allowed_mentions": {"parse": []},
             },
-            timeout=10,
+            timeout=(2, 6),
         )
         discord_response.raise_for_status.assert_called_once_with()
         self.module.sns.publish.assert_not_called()
@@ -374,15 +385,15 @@ class AutoPurchaseCredentialsTest(unittest.TestCase):
             response = self.module.lambda_handler({}, None)
 
         self.assertEqual(response["statusCode"], 200)
-        history.assert_called_once_with(
-            status="ok",
-            amount_jpy=10005,
-            btc=Decimal("0.001"),
-            rate=Decimal("10000000"),
-            order_id="123",
-            fee=Decimal("5"),
-            requested_amount=10000,
-        )
+        self.assertEqual([call.kwargs["status"] for call in history.call_args_list], ["pending", "pending", "ok"])
+        final = history.call_args.kwargs
+        self.assertEqual(final["amount_jpy"], 10005)
+        self.assertEqual(final["btc"], Decimal("0.001"))
+        self.assertEqual(final["rate"], Decimal("10000000"))
+        self.assertEqual(final["order_id"], "123")
+        self.assertEqual(final["fee"], Decimal("5"))
+        self.assertEqual(final["requested_amount"], 10000)
+        self.assertEqual(len({call.kwargs["history_key"] for call in history.call_args_list}), 1)
 
     def test_order_timeout_is_marked_for_manual_confirmation(self):
         now = self.module.datetime.now(self.module.JST)

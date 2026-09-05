@@ -296,7 +296,7 @@ Resources:
       CodeUri: auto-purchase/
       Handler: btc_auto_purchase.lambda_handler
       Runtime: python3.12
-      Timeout: 45
+      Timeout: 120
       MemorySize: 256
       Description: Buy BTC on GMO Coin when the configured schedule is due
       Environment:
@@ -331,6 +331,7 @@ Resources:
               Action:
                 - dynamodb:PutItem
                 - dynamodb:UpdateItem
+                - dynamodb:Scan
               Resource: !GetAtt BtcDcaExecutionTable.Arn
             - Effect: Allow
               Action:
@@ -345,6 +346,14 @@ Resources:
             Name: btc-daily-purchase
             Description: Check the BTC recurring purchase schedule
             Schedule: !Ref ScheduleExpression
+            Enabled: true
+        ReconcilePurchases:
+          Type: Schedule
+          Properties:
+            Name: btc-reconcile-purchases
+            Description: Reconcile unfinished orders and retry result notifications without placing orders
+            Schedule: cron(5 * * * ? *)
+            Input: '{"action":"reconcile"}'
             Enabled: true
 
   BtcPurchaseNotificationTopic:

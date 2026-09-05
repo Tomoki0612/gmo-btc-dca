@@ -347,6 +347,9 @@ def _handle_history():
 
     items = []
     for it in resp.get("Items", []):
+        # Older versions recorded simulations as successful real purchases.
+        if it.get("type") == "purchase" and it.get("orderId") == "DRY_RUN":
+            continue
         row = {
             "id": it.get("id") or it.get("sk"),
             "type": it.get("type"),
