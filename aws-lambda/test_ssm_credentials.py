@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 
 
 ROOT = Path(__file__).resolve().parent
+AUTHORIZED_SUB = "00000000-0000-4000-8000-000000000001"
 
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
@@ -31,6 +32,13 @@ def parameter_not_found():
     )
 
 
+def authorized_event(**fields):
+    return {
+        "requestContext": {"authorizer": {"claims": {"sub": AUTHORIZED_SUB}}},
+        **fields,
+    }
+
+
 class SettingsApiCredentialsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -43,7 +51,7 @@ class SettingsApiCredentialsTest(unittest.TestCase):
         self.module.table = Mock()
         self.module.history_table = Mock()
         self.module.ssm = Mock()
-        self.module.AUTHORIZED_USER_SUB = ""
+        self.module.AUTHORIZED_USER_SUB = AUTHORIZED_SUB
 
     def test_get_reports_configuration_without_returning_secrets(self):
         self.module.table.get_item.return_value = {
@@ -60,7 +68,7 @@ class SettingsApiCredentialsTest(unittest.TestCase):
         self.module.ssm.get_parameter.side_effect = parameter_not_found()
 
         response = self.module.lambda_handler(
-            {"httpMethod": "GET", "path": "/settings"},
+            authorized_event(httpMethod="GET", path="/settings"),
             None,
         )
         body = json.loads(response["body"])
@@ -86,11 +94,7 @@ class SettingsApiCredentialsTest(unittest.TestCase):
 
         with patch.object(self.module, "_fetch_assets", return_value=[]):
             response = self.module.lambda_handler(
-                {
-                    "httpMethod": "POST",
-                    "path": "/settings",
-                    "body": json.dumps({"amount": 20000}),
-                },
+                authorized_event(httpMethod="POST", path="/settings", body=json.dumps({"amount": 20000})),
                 None,
             )
 
@@ -119,11 +123,7 @@ class SettingsApiCredentialsTest(unittest.TestCase):
         }
 
         response = self.module.lambda_handler(
-            {
-                "httpMethod": "POST",
-                "path": "/settings",
-                "body": json.dumps({"scheduleTime": 24}),
-            },
+            authorized_event(httpMethod="POST", path="/settings", body=json.dumps({"scheduleTime": 24})),
             None,
         )
 
@@ -136,7 +136,7 @@ class SettingsApiCredentialsTest(unittest.TestCase):
             {"sk": "real", "type": "purchase", "status": "ok", "orderId": "123", "amount": 10005},
             {"sk": "change", "type": "change", "field": "amount"},
         ]}
-        response = self.module.lambda_handler({"httpMethod": "GET", "path": "/history"}, None)
+        response = self.module.lambda_handler(authorized_event(httpMethod="GET", path="/history"), None)
         items = json.loads(response["body"])["items"]
         self.assertEqual([row["id"] for row in items], ["real", "change"])
 
@@ -157,17 +157,44 @@ class SettingsApiCredentialsTest(unittest.TestCase):
         self.assertEqual(response["statusCode"], 403)
         self.module.table.get_item.assert_not_called()
 
+    def test_rejects_missing_allowlist_or_invalid_claims_before_any_data_access(self):
+        contexts = [
+            {},
+            {"requestContext": None},
+            {"requestContext": {"authorizer": None}},
+            {"requestContext": {"authorizer": {"claims": None}}},
+            {"requestContext": {"authorizer": {"claims": "invalid"}}},
+            {"requestContext": {"authorizer": {"claims": {}}}},
+            {"requestContext": {"authorizer": {"claims": {"sub": "different-sub"}}}},
+        ]
+        cases = [(AUTHORIZED_SUB, context) for context in contexts]
+        cases.append(("", authorized_event()))
+        for allowed_sub, context in cases:
+            self.module.AUTHORIZED_USER_SUB = allowed_sub
+            for method, path in (("GET", "/settings"), ("POST", "/settings"),
+                                 ("GET", "/balance"), ("GET", "/history")):
+                with self.subTest(allowed_sub=allowed_sub, context=context, method=method, path=path):
+                    response = self.module.lambda_handler(
+                        {**context, "httpMethod": method, "path": path, "body": "{}"}, None,
+                    )
+                    self.assertEqual(response["statusCode"], 403)
+                    for client in (self.module.table, self.module.history_table, self.module.ssm):
+                        self.assertEqual(client.mock_calls, [])
+
+    def test_cors_preflight_remains_available_without_authentication(self):
+        self.module.AUTHORIZED_USER_SUB = ""
+        response = self.module.lambda_handler({"httpMethod": "OPTIONS", "path": "/settings"}, None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(self.module.table.mock_calls, [])
+        self.assertEqual(self.module.ssm.mock_calls, [])
+
     def test_rejects_credentials_that_gmo_does_not_accept(self):
         self.module.table.get_item.return_value = {"Item": {"userId": "user1"}}
         self.module.ssm.get_parameter.side_effect = parameter_not_found()
 
         with patch.object(self.module, "_fetch_assets", side_effect=RuntimeError("invalid key")):
             response = self.module.lambda_handler(
-                {
-                    "httpMethod": "POST",
-                    "path": "/settings",
-                    "body": json.dumps({"apiKey": "bad", "apiSecret": "bad"}),
-                },
+                authorized_event(httpMethod="POST", path="/settings", body=json.dumps({"apiKey": "bad", "apiSecret": "bad"})),
                 None,
             )
 
@@ -247,6 +274,48 @@ class AutoPurchaseCredentialsTest(unittest.TestCase):
             Subject="BTC積立エラー",
             Message="失敗しました",
         )
+
+    def test_http_notification_errors_do_not_log_webhook_secrets(self):
+        webhook_url = "https://discord.com/api/webhooks/123/private-webhook-token"
+        self.module.ssm.get_parameter.return_value = {"Parameter": {"Value": webhook_url}}
+        self.module.sns.publish.return_value = {"MessageId": "fallback-message"}
+        for status in (401, 404, 429, 500):
+            with self.subTest(status=status):
+                response = self.module.requests.Response()
+                response.status_code = status
+                response.url = webhook_url
+                response.reason = "DO_NOT_LOG"
+                with patch.object(self.module.requests, "post", return_value=response), patch("builtins.print") as log:
+                    self.assertTrue(self.module.send_notification("BTC積立エラー", "失敗しました"))
+                logged = "\n".join(str(call) for call in log.call_args_list)
+                self.assertIn(f"HTTP {status}", logged)
+                self.assertIn("HTTPError", logged)
+                self.assertNotIn(webhook_url, logged)
+                self.assertNotIn("private-webhook-token", logged)
+                self.assertNotIn("DO_NOT_LOG", logged)
+        self.assertEqual(self.module.sns.publish.call_count, 4)
+
+    def test_network_notification_errors_do_not_log_webhook_secrets(self):
+        webhook_url = "https://discord.com/api/webhooks/123/private-webhook-token"
+        self.module.ssm.get_parameter.return_value = {"Parameter": {"Value": webhook_url}}
+        self.module.sns.publish.return_value = {"MessageId": "fallback-message"}
+        for exception in (self.module.requests.exceptions.Timeout, self.module.requests.exceptions.ConnectionError):
+            with self.subTest(exception=exception.__name__):
+                with patch.object(self.module.requests, "post", side_effect=exception(webhook_url)), patch("builtins.print") as log:
+                    self.assertTrue(self.module.send_notification("BTC積立エラー", "失敗しました"))
+                logged = "\n".join(str(call) for call in log.call_args_list)
+                self.assertIn(exception.__name__, logged)
+                self.assertNotIn(webhook_url, logged)
+                self.assertNotIn("private-webhook-token", logged)
+
+    def test_email_notification_error_does_not_log_exception_text(self):
+        self.module.ssm.get_parameter.side_effect = parameter_not_found()
+        self.module.sns.publish.side_effect = RuntimeError("private-webhook-token")
+        with patch("builtins.print") as log:
+            self.assertFalse(self.module.send_notification("BTC積立エラー", "失敗しました"))
+        logged = "\n".join(str(call) for call in log.call_args_list)
+        self.assertIn("RuntimeError", logged)
+        self.assertNotIn("private-webhook-token", logged)
 
     def test_notification_can_be_tested_without_running_a_purchase(self):
         with patch.object(self.module, "send_notification") as notify:

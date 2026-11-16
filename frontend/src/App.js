@@ -16,6 +16,11 @@ I18n.putVocabulariesForLanguage('ja', {
   'Code': '確認コード',
   'New Password': '新しいパスワード',
   'Submit': '送信',
+  'Setup TOTP': '認証アプリの登録',
+  'Confirm TOTP Code': '認証コードの確認',
+  'Confirmation Code': '確認コード',
+  'Enter your code': '6桁のコードを入力',
+  'Confirm': '確認',
 });
 I18n.setLanguage('ja');
 
@@ -41,6 +46,13 @@ const formFields = {
   signIn: {
     username: { label: 'メールアドレス', placeholder: 'メールアドレスを入力' },
     password: { label: 'パスワード', placeholder: 'パスワードを入力' },
+  },
+  setupTotp: {
+    QR: { totpIssuer: 'ツミビット' },
+    confirmation_code: { label: '確認コード', placeholder: 'Bitwardenの6桁のコード' },
+  },
+  confirmSignIn: {
+    confirmation_code: { label: '確認コード', placeholder: 'Bitwardenの6桁のコード' },
   },
 };
 
@@ -1546,6 +1558,16 @@ const components = {
         <p>BTC自動積立サービス</p>
       </div>
     );
+  },
+  SetupTotp: {
+    Header() {
+      return (
+        <div className="auth-header">
+          <h2>認証アプリの登録</h2>
+          <p>Bitwarden AuthenticatorでQRコードを読み取り、表示された6桁のコードを入力してください。</p>
+        </div>
+      );
+    },
   },
 };
 

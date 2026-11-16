@@ -7,7 +7,7 @@ GMOコインのAPIを使ってビットコイン（BTC）を自動積立する�
 - 画面で設定した頻度・日付・時刻にBTCを自動購入
 - 成行注文
 - エラー時の通知機能（Lambda版）
-- Cognitoログインで保護された設定・残高・履歴API
+- Cognitoログインと認証アプリの二段階認証で保護された設定・残高・履歴API
 - 同一時間帯の重複注文防止と実約定ベースの購入履歴
 
 ## 実行環境の選択
@@ -34,12 +34,16 @@ GMOコインのAPIを使ってビットコイン（BTC）を自動積立する�
 - AWSの他サービスと連携可能
 - Lambda、API Gateway、Cognito、DynamoDB、EventBridgeを1スタックで管理
 - GMO API認証情報はSSM Parameter Store StandardのSecureStringで管理
+- DynamoDBは各テーブル1 RCU / 1 WCUのプロビジョンド方式で無料枠に合わせる
 
 **デメリット:**
 - AWSアカウントが必要
 - セットアップがやや複雑
 
 [セットアップ手順](aws-lambda/README.md)
+
+二段階認証には無料の単体アプリBitwarden Authenticatorを使えます。
+初回のQR登録・端末紛失時の復旧・料金確認はAWS版のセットアップ手順を参照してください。
 
 ## 前提条件
 
