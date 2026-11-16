@@ -228,11 +228,12 @@ def _validate_purchase_settings(settings):
 # SNSクライアントの初期化
 sns = boto3.client('sns', region_name='ap-northeast-1', config=AWS_CONFIG)
 
-# APIキーとシークレットキーを出力（セキュリティ上の理由から一部のみ表示）
-'''
-print(f"APIキー: {API_KEY[:5]}...{API_KEY[-5:]}")
-print(f"シークレットキー: {API_SECRET[:5]}...{API_SECRET[-5:]}")
-'''
+def _log_notification_error(channel, error):
+    # requests exceptions can contain the full secret webhook URL. Never log their text.
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    detail = f" (HTTP {status})" if isinstance(status, int) and 100 <= status <= 599 else ""
+    print(f"{channel}通知送信エラー: {type(error).__name__}{detail}")
+
 
 def send_notification(subject, message):
     """Discordへ通知し、送信できない場合だけSNSメールへフォールバックする。"""
@@ -261,7 +262,7 @@ def send_notification(subject, message):
             return True
         print("Discord Webhookが未設定のため、メール通知へフォールバックします")
     except Exception as e:
-        print(f"Discord通知送信エラー: {str(e)}")
+        _log_notification_error("Discord", e)
 
     if not SNS_TOPIC_ARN:
         print("SNS_TOPIC_ARNが設定されていないため、フォールバック通知をスキップします")
@@ -276,7 +277,7 @@ def send_notification(subject, message):
         print(f"メール通知送信成功: MessageId={response['MessageId']}")
         return True
     except Exception as e:
-        print(f"メール通知送信エラー: {str(e)}")
+        _log_notification_error("メール", e)
         return False
 
 def get_account_balance():

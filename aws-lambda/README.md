@@ -69,6 +69,10 @@ aws cognito-idp list-users \
 `FrontendOrigin` は末尾スラッシュなしの実際のフロントURLを指定します。APIのCORSは
 このオリジンだけを許可します。
 
+`AUTHORIZED_USER_SUB`が空、認証済みの`sub`が欠落、または別ユーザーの場合は、
+設定・残高・履歴APIはデータへアクセスする前に403を返します。ローカルの直接呼び出しでも
+認証を省略できません。CORSのOPTIONSだけは認証不要です。
+
 `make deploy`は次を一括で実行します。
 
 1. Python 3.12向けに両Lambdaをビルド
@@ -77,6 +81,70 @@ aws cognito-idp list-users \
 
 環境・通知先・スケジュール・DryRunは`samconfig.toml`で管理します。
 秘密情報は`samconfig.toml`へ書かないでください。
+
+## Bitwarden Authenticatorでの二段階認証
+
+CognitoはTOTP認証を必須にし、SMS・メールによるMFAは使用しません。無料の単体アプリ
+[Bitwarden Authenticator](https://bitwarden.com/products/authenticator/)を使用できます。
+パスワード再設定の送信先は検証済みメールのみで、電話番号による復旧は使用しません。
+
+適用・確認の順序:
+
+1. フロントの変更をCloudflare Pagesへ反映する。
+2. AWSへの管理者アクセスと検証済みメールが利用できることを確認する。
+3. `make changeset`で、既存Cognitoと3テーブルに置換・削除がないことを確認してSAMを適用する。
+   バックエンドだけでなく、MFA設定とDBの課金方式もこの適用で更新される。
+4. 新しいプライベートウィンドウでログインする。初回はQRコードをBitwardenで読み取り、
+   表示された6桁のコードを入力する。発行元は「ツミビット」と表示される。
+5. 一度ログアウトして再ログインし、パスワードの後に6桁コードが必要なこと、
+   誤ったコードではログインできないことを確認する。端末の時刻は自動設定にする。
+6. 設定・残高・履歴を確認し、認証なしのAPI呼び出しは401、別ユーザーは403となることを確認する。
+
+QRコードと登録用の秘密鍵は認証情報です。ログ、Git、外部QR生成サービスへ送信しないでください。
+端末移行に備え、Bitwardenのバックアップはアプリの案内に従って安全に保管します。
+CognitoのTOTPには、このアプリが発行する使い捨て復旧コードはありません。
+
+有効化前に発行されたIDトークンは、有効期限（最大60分）までAPIで利用できる場合があります。
+既存セッションの即時無効化をMFA有効化だけで保証しません。
+
+### 端末紛失時の復旧
+
+新しいAWS CLI v2と、対象ユーザープールに対する`cognito-idp:AdminDeleteSoftwareToken`
+権限を持つ管理者で、対象ユーザーのTOTPを削除します。`<UserPoolId>`はSAM Output、
+`<Username>`はCognitoのユーザー名へ置き換えてください。
+
+```bash
+aws cognito-idp admin-delete-software-token \
+  --user-pool-id '<UserPoolId>' \
+  --username '<Username>' \
+  --region ap-northeast-1
+```
+
+次回ログインで新しい端末のQR登録を行います。ユーザーを削除・再作成すると`sub`が変わるため、
+復旧のためにユーザーを作り直さないでください。`admin-set-user-mfa-preference`だけでは
+登録済みTOTPの秘密鍵はリセットされません。
+[AWSの復旧API](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_AdminDeleteSoftwareToken.html)
+を参照してください。
+
+## 無料枠に合わせた運用
+
+3テーブルはそれぞれプロビジョンドの1 RCU / 1 WCUで、合計3 RCU / 3 WCUです。
+オートスケーリングは設定せず、DynamoDB Standardの無料枠（25 RCU / 25 WCU）に収めます。
+同じAWSアカウントの他テーブルによる無料枠消費と、保存容量も確認してください。
+既存テーブルの名前、データ、TTL、`Retain`は維持します。
+
+容量を使い切るとスロットリングされます。注文前の記録が失敗した場合は注文を送らず、
+注文後の結果が不明な場合は既存の定期照合・手動確認で扱います。画面でエラーになったときは、
+直後の連打を避けて時間をおいて再試行してください。
+
+0円運用の確認では、請求の合計だけでなく、サービス別の単価・使用量・無料枠・クレジットを見ます。
+`USD 0.00`表示でも、従量料金が1セント未満で丸め表示されている場合があります。
+API Gateway、SNS、CloudWatch、KMS、SAMのS3も確認対象です。AWSの予算通知は
+請求額を0円で強制停止する仕組みではありません。
+
+フロントはCloudflare Pagesで配信します。古いAmplify Hostingのデータが残っている場合は、
+現在の配信先・ドメイン・ビルド連携を確認してから整理してください。SAM用S3は
+デプロイ・ロールバックに必要な成果物を含むため、バケット全体を一括削除しないでください。
 
 ## Outputs
 
@@ -135,9 +203,12 @@ make logs-settings
   既存の未確定注文は引き続き手動確認してください。
 - 設定APIは金額、頻度、日付、時刻をサーバー側でも検証します。
 
-`btc-dca-executions`はオンデマンドテーブルで、ロック項目はTTLにより約90日後に削除されます。
+`btc-dca-executions`のロック項目はTTLにより約90日後に削除されます。
 定期照合はこのテーブルをページ単位でScanします。復旧・通知再送の対象期間もTTLまでです。
 追加の常時稼働サービスはありません。
+
+通知送信のエラーログは、例外の種類と取得可能なHTTPステータスだけを記録します。
+Webhookの秘密URLを含み得る例外全文は出力しません。
 
 ## DRY_RUN
 

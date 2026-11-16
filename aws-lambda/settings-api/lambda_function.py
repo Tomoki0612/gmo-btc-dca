@@ -106,19 +106,17 @@ def _json_response(status, body):
 
 
 def _request_user_sub(event):
-    return (
-        event.get("requestContext", {})
-        .get("authorizer", {})
-        .get("claims", {})
-        .get("sub")
-    )
+    claims = event
+    for key in ("requestContext", "authorizer", "claims"):
+        claims = claims.get(key)
+        if not isinstance(claims, dict):
+            return None
+    return claims.get("sub")
 
 
 def _is_authorized_user(event):
-    # Local direct invocations and tests may intentionally omit the deployment parameter.
-    if not AUTHORIZED_USER_SUB:
-        return True
-    return _request_user_sub(event) == AUTHORIZED_USER_SUB
+    # Missing deployment configuration must never disable the single-user restriction.
+    return bool(AUTHORIZED_USER_SUB) and _request_user_sub(event) == AUTHORIZED_USER_SUB
 
 
 def _integer(value, label):

@@ -38,6 +38,20 @@ API側のSAMパラメータ`FrontendOrigin`にも、ここでデプロイする�
 API Gateway、Cognito Authorizer、CORS、Lambda実行権限はすべて
 `aws-lambda/template.yaml` で管理します。個別のAWS CLI設定は不要です。
 
+### 二段階認証
+
+CognitoでTOTPを必須にし、既存のAuthenticatorが初回のQR登録と次回以降のコード入力を扱います。
+無料の単体アプリBitwarden AuthenticatorでQRコードを登録してください。発行元は「ツミビット」です。
+コードが拒否された場合は端末の時刻を自動設定にし、新しい6桁コードで再試行します。
+SMSは使いません。QR生成のための外部サービスも追加しません。
+本番への適用順序と端末紛失時の手順は[バックエンドの説明](../aws-lambda/README.md#bitwarden-authenticatorでの二段階認証)を参照してください。
+
+### 依存ライブラリの更新
+
+2026-11-16に既存のバージョン範囲内で更新しました。`npm audit --package-lock-only`の
+警告パッケージ数は360から34に減少しています。推移と残存警告の扱いは
+[依存関係の監査メモ](DEPENDENCY_AUDIT.md)を参照してください。
+
 ## Available Scripts
 
 In the project directory, you can run:
