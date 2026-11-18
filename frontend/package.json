@@ -4,49 +4,28 @@
   "private": true,
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.0",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^13.5.0",
     "aws-amplify": "^6.16.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
   },
   "devDependencies": {
-    "typescript": "4.9.5"
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@vitejs/plugin-react": "^6.3.0",
+    "jsdom": "^31.0.1",
+    "qrcode": "1.5.0",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   },
   "scripts": {
-    "prestart": "node scripts/check-env.js",
-    "start": "react-scripts start",
-    "prebuild": "node scripts/check-env.js",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "start": "vite --port 3000",
+    "build": "vite build",
+    "test": "vitest run"
   },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "jest": {
-    "moduleNameMapper": {
-      "^@aws-amplify/ui-react/styles\\.css$": "<rootDir>/node_modules/@aws-amplify/ui-react/dist/styles.css",
-      "^@radix-ui/primitive/is-development$": "<rootDir>/node_modules/@radix-ui/primitive/dist/internal/is-development.false.js"
-    }
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0"
   }
 }

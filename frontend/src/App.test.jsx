@@ -1,15 +1,16 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import App, { authFetch, buildFeeTiers, validateRecommendedFees } from './App';
 
-jest.mock('aws-amplify/auth', () => ({
-  fetchAuthSession: jest.fn(),
-  signOut: jest.fn(),
-  updatePassword: jest.fn(),
+vi.mock('aws-amplify/auth', async (importOriginal) => ({
+  ...await importOriginal(),
+  fetchAuthSession: vi.fn(),
+  signOut: vi.fn(),
+  updatePassword: vi.fn(),
 }));
 
 beforeEach(() => {
   fetchAuthSession.mockReset();
-  global.fetch = jest.fn().mockResolvedValue({ ok: true });
+  global.fetch = vi.fn().mockResolvedValue({ ok: true });
 });
 
 test('exports the application component', () => {

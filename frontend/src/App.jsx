@@ -56,7 +56,7 @@ const formFields = {
   },
 };
 
-const API_BASE = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
+const API_BASE = (import.meta.env.REACT_APP_API_BASE_URL || '').replace(/\/$/, '');
 const API_URL = `${API_BASE}/settings`;
 const BALANCE_URL = `${API_BASE}/balance`;
 const HISTORY_URL = `${API_BASE}/history`;

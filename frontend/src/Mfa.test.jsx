@@ -4,16 +4,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import QRCode from 'qrcode';
 import App from './App';
 
-jest.mock('aws-amplify/auth', () => ({
-  ...jest.requireActual('aws-amplify/auth'),
-  getCurrentUser: jest.fn(),
-  signIn: jest.fn(),
-  confirmSignIn: jest.fn(),
+vi.mock('aws-amplify/auth', async (importOriginal) => ({
+  ...await importOriginal(),
+  getCurrentUser: vi.fn(),
+  signIn: vi.fn(),
+  confirmSignIn: vi.fn(),
 }));
 
 // Keep QR generation local and deterministic; the secret is a test fixture.
-jest.mock('qrcode', () => ({
-  toDataURL: jest.fn().mockResolvedValue('data:image/png;base64,AA=='),
+vi.mock('qrcode', () => ({
+  default: { toDataURL: vi.fn().mockResolvedValue('data:image/png;base64,AA==') },
 }));
 
 beforeAll(() => {
@@ -29,12 +29,12 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   getCurrentUser.mockRejectedValue(new Error('Not signed in'));
   confirmSignIn.mockRejectedValue(Object.assign(
     new Error('確認コードが正しくありません'), { name: 'CodeMismatchException' },
   ));
-  global.fetch = jest.fn();
+  global.fetch = vi.fn();
 });
 
 test.each([

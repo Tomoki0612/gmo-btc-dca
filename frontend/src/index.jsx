@@ -8,8 +8,8 @@ import reportWebVitals from './reportWebVitals';
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: process.env.REACT_APP_COGNITO_USER_POOL_ID,
-      userPoolClientId: process.env.REACT_APP_COGNITO_USER_POOL_CLIENT_ID,
+      userPoolId: import.meta.env.REACT_APP_COGNITO_USER_POOL_ID,
+      userPoolClientId: import.meta.env.REACT_APP_COGNITO_USER_POOL_CLIENT_ID,
     }
   }
 });

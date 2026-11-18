@@ -94,6 +94,9 @@ cron式の例：
 - `0 */12 * * *` - 12時間ごと
 - `0 0 * * 1` - 毎週月曜日0時
 
+月次以外に変更する場合は、同時に同じ期間の注文を識別する `DCA_ORDER_FREQUENCY` を設定してください。
+設定値は[GitHub Actions版の手順](github-actions/README.md#実行日時を変更)を参照してください。
+
 ### AWS Lambda
 Web画面で購入頻度・日付・時刻を変更します。EventBridgeは毎時Lambdaを起動し、
 Lambdaが保存済み設定から購入対象時刻かを判定します。
