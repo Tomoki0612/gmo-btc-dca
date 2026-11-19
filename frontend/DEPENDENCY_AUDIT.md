@@ -1,5 +1,16 @@
 # フロントエンド依存関係の監査
 
+## 2026-11-18の再監査
+
+Create React AppをViteとVitestへ移行し、Node.js 24でビルドします。
+`npm audit --package-lock-only --ignore-scripts` のHigh判定は74パッケージから
+6パッケージへ減少し、Criticalは0件でした。残る6パッケージはすべて
+[picomatchのアドバイザリ](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)に
+由来します。確認時点で修正版はなく、対象は開発・ビルド・テスト用の依存です。
+Cloudflare Pagesはビルド済みの静的ファイルを配信します。
+
+## 2026-11-16の監査結果
+
 確認日: 2026-11-16。`npm audit --package-lock-only --ignore-scripts --json`で
 更新前後のlockfileを比較しました。件数は監査対象のパッケージ数で、独立した脆弱性の件数ではありません。
 
